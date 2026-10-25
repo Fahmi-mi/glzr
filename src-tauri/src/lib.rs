@@ -1,9 +1,12 @@
 pub mod error;
+pub mod fs;
 pub mod git;
 pub mod pty;
 pub mod state;
 
 use crate::error::{AppError, AppResult};
+use crate::fs::detect::{EncodingKind, LineEnding};
+use crate::fs::{DirEntryDto, FileReadDto, WriteResultDto, DEFAULT_IGNORE_NAMES};
 use crate::state::{AppState, ProjectStateDto, XdgPaths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,6 +31,58 @@ fn project_open_folder(
 #[tauri::command]
 fn project_remove_recent(path: String, state: State<'_, AppState>) -> AppResult<ProjectStateDto> {
     state.remove_recent_folder(&path)
+}
+
+#[tauri::command]
+fn fs_list_dir(
+    dir_path: Option<String>,
+    state: State<'_, AppState>,
+) -> AppResult<Vec<DirEntryDto>> {
+    let root = state.active_folder_path()?;
+    let target = dir_path.as_deref().map(Path::new);
+    fs::list_dir(&root, target, DEFAULT_IGNORE_NAMES)
+}
+
+#[tauri::command]
+fn fs_read_file(path: String, state: State<'_, AppState>) -> AppResult<FileReadDto> {
+    let root = state.active_folder_path()?;
+    fs::read_file(&root, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_write_file(
+    path: String,
+    content: String,
+    encoding: EncodingKind,
+    line_ending: LineEnding,
+    state: State<'_, AppState>,
+) -> AppResult<WriteResultDto> {
+    let root = state.active_folder_path()?;
+    fs::write_file(&root, Path::new(&path), &content, encoding, line_ending)
+}
+
+#[tauri::command]
+fn fs_create_file(path: String, state: State<'_, AppState>) -> AppResult<String> {
+    let root = state.active_folder_path()?;
+    fs::create_file(&root, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_create_dir(path: String, state: State<'_, AppState>) -> AppResult<String> {
+    let root = state.active_folder_path()?;
+    fs::create_dir(&root, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_rename(from_path: String, to_path: String, state: State<'_, AppState>) -> AppResult<String> {
+    let root = state.active_folder_path()?;
+    fs::rename_entry(&root, Path::new(&from_path), Path::new(&to_path))
+}
+
+#[tauri::command]
+fn fs_trash(path: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    fs::trash_entry(&root, Path::new(&path))
 }
 
 #[tauri::command]
@@ -154,6 +209,13 @@ pub fn run() {
             project_get_state,
             project_open_folder,
             project_remove_recent,
+            fs_list_dir,
+            fs_read_file,
+            fs_write_file,
+            fs_create_file,
+            fs_create_dir,
+            fs_rename,
+            fs_trash,
             reveal_in_file_manager,
             open_external
         ]);
