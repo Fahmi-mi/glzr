@@ -242,13 +242,13 @@ Deteksi biner: baca 8 KB pertama, ada byte `0x00` berarti biner.
 
 **Bahasa:**
 
-- Paket resmi `@codemirror/lang-*`: JavaScript/TypeScript (JSX/TSX), HTML, CSS, JSON, Markdown, Python, Rust, Go, C/C++, Java, PHP, SQL, XML, YAML, Sass/Less, Vue.
-- `@codemirror/legacy-modes`: Shell/Bash, TOML, Dockerfile, Ruby, Lua, Swift, Kotlin, C#, PowerShell, Nginx, diff.
+- Paket resmi `@codemirror/lang-*`: JavaScript/TypeScript (JSX/TSX), HTML, CSS, JSON, Markdown, Python, Rust, C/C++, Java, PHP, SQL, XML, YAML, Sass/Less, Vue.
+- `@codemirror/legacy-modes`: Go, Shell/Bash, TOML, Dockerfile, Ruby, Lua, Swift, Kotlin, C#, PowerShell, Nginx, diff.
 - Komunitas: Svelte lewat `@replit/codemirror-lang-svelte`.
 
-Deteksi bahasa: ekstensi, nama file khusus (`Dockerfile`, `Makefile`, `.gitignore`, `.env`, `Cargo.lock`, `.bashrc`), lalu shebang. Semuanya satu tabel di `languages.ts`. Setiap bahasa dimuat dengan `import()` dinamis saat pertama dipakai.
+Deteksi bahasa: ekstensi, nama file khusus (`Dockerfile`, `Makefile`, `.gitignore`, `.env`, `Cargo.lock`, `go.mod`, `go.sum`, `go.work`, `.bashrc`), lalu shebang. Semuanya satu tabel di `languages.ts`. Setiap bahasa dimuat dengan `import()` dinamis saat pertama dipakai.
 
-Set awal: JS/TS, JSON, HTML, CSS, Markdown, Rust, Python, YAML, TOML, Shell, Svelte, Dockerfile.
+Set awal: JS/TS, JSON, HTML, CSS, Markdown, Rust, Go, Python, YAML, TOML, Shell, Svelte, Dockerfile.
 
 ### 4.3 Git panel
 
