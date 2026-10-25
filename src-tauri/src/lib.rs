@@ -9,10 +9,12 @@ use crate::fs::detect::{EncodingKind, LineEnding};
 use crate::fs::{DirEntryDto, DraftDto, FileReadDto, WriteResultDto, DEFAULT_IGNORE_NAMES};
 use crate::git::hunk::DiffHunk;
 use crate::git::{GitBranchesDto, GitDiffDto, GitStatusDto};
+use crate::pty::{PtyExitEvent, PtyOutputEvent, PtySpawnDto};
 use crate::state::{AppState, ProjectStateDto, XdgPaths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::{Manager, State, Window, WindowEvent};
+use std::thread;
+use tauri::{AppHandle, Emitter, Manager, State, Window, WindowEvent};
 
 #[tauri::command]
 fn project_get_state(state: State<'_, AppState>) -> AppResult<ProjectStateDto> {
@@ -202,6 +204,84 @@ fn git_push(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command]
+fn pty_spawn(
+    session_id: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<PtySpawnDto> {
+    let root = state.active_folder_path()?;
+    let (prog, owned_args) = pty::resolve_default_shell(None);
+    let arg_refs: Vec<&str> = owned_args.iter().map(String::as_str).collect();
+
+    let (dto, arc_session, rx) = pty::spawn_session_entry(
+        &state.pty_sessions,
+        session_id,
+        &prog,
+        &arg_refs,
+        &root,
+        cols.unwrap_or(80),
+        rows.unwrap_or(24),
+    )?;
+
+    let sid = dto.session_id.clone();
+    thread::spawn(move || {
+        while let Ok(chunk) = rx.recv() {
+            let _ = app.emit(
+                "pty:output",
+                PtyOutputEvent {
+                    session_id: sid.clone(),
+                    data: chunk,
+                },
+            );
+        }
+
+        let exit_code = arc_session.wait_exit_code();
+        if let Some(st) = app.try_state::<AppState>() {
+            if let Ok(mut guard) = st.pty_sessions.lock() {
+                if guard
+                    .get(&sid)
+                    .is_some_and(|existing| std::sync::Arc::ptr_eq(existing, &arc_session))
+                {
+                    guard.remove(&sid);
+                }
+            }
+        }
+
+        let _ = app.emit(
+            "pty:exit",
+            PtyExitEvent {
+                session_id: sid,
+                code: exit_code,
+            },
+        );
+    });
+
+    Ok(dto)
+}
+
+#[tauri::command]
+fn pty_write(session_id: String, data: String, state: State<'_, AppState>) -> AppResult<()> {
+    pty::write_session_entry(&state.pty_sessions, &session_id, data.as_bytes())
+}
+
+#[tauri::command]
+fn pty_resize(
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    pty::resize_session_entry(&state.pty_sessions, &session_id, cols, rows)
+}
+
+#[tauri::command]
+fn pty_kill(session_id: String, state: State<'_, AppState>) -> AppResult<()> {
+    pty::kill_session_entry(&state.pty_sessions, &session_id)
+}
+
+#[tauri::command]
 fn reveal_in_file_manager(path: String) -> AppResult<()> {
     let target = Path::new(&path);
     if !target.exists() {
@@ -351,6 +431,10 @@ pub fn run() {
             git_checkout,
             git_pull,
             git_push,
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill,
             reveal_in_file_manager,
             open_external
         ]);
