@@ -1,0 +1,19 @@
+# Build and Dependencies
+node_modules/
+.svelte-kit/
+build/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Environment & OS
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# IDE & Logs
+.vscode/
+.idea/
+*.log
+npm-debug.log*
