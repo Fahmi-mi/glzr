@@ -109,6 +109,14 @@ export interface GitBranchesDto {
   branches: string[];
 }
 
+export interface PtySpawnDto {
+  sessionId: string;
+  program: string;
+  cwd: string;
+  cols: number;
+  rows: number;
+}
+
 export interface BackendEventMap {
   'pty:output': { sessionId: string; data: string };
   'pty:exit': { sessionId: string; code: number | null };
@@ -293,6 +301,30 @@ export async function gitPull(): Promise<void> {
 
 export async function gitPush(): Promise<void> {
   return callCommand<void>('git_push');
+}
+
+export async function ptySpawn(
+  sessionId?: string,
+  cols?: number,
+  rows?: number
+): Promise<PtySpawnDto> {
+  return callCommand<PtySpawnDto>('pty_spawn', {
+    sessionId: sessionId ?? null,
+    cols: cols ?? null,
+    rows: rows ?? null
+  });
+}
+
+export async function ptyWrite(sessionId: string, data: string): Promise<void> {
+  return callCommand<void>('pty_write', { sessionId, data });
+}
+
+export async function ptyResize(sessionId: string, cols: number, rows: number): Promise<void> {
+  return callCommand<void>('pty_resize', { sessionId, cols, rows });
+}
+
+export async function ptyKill(sessionId: string): Promise<void> {
+  return callCommand<void>('pty_kill', { sessionId });
 }
 
 export async function revealInFileManager(path: string): Promise<void> {
