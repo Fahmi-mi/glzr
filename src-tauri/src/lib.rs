@@ -6,7 +6,7 @@ pub mod state;
 
 use crate::error::{AppError, AppResult};
 use crate::fs::detect::{EncodingKind, LineEnding};
-use crate::fs::{DirEntryDto, FileReadDto, WriteResultDto, DEFAULT_IGNORE_NAMES};
+use crate::fs::{DirEntryDto, DraftDto, FileReadDto, WriteResultDto, DEFAULT_IGNORE_NAMES};
 use crate::state::{AppState, ProjectStateDto, XdgPaths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -83,6 +83,36 @@ fn fs_rename(from_path: String, to_path: String, state: State<'_, AppState>) -> 
 fn fs_trash(path: String, state: State<'_, AppState>) -> AppResult<()> {
     let root = state.active_folder_path()?;
     fs::trash_entry(&root, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_list_workspace_files(state: State<'_, AppState>) -> AppResult<Vec<String>> {
+    let root = state.active_folder_path()?;
+    fs::list_workspace_files(&root, DEFAULT_IGNORE_NAMES)
+}
+
+#[tauri::command]
+fn fs_read_image_data_url(path: String, state: State<'_, AppState>) -> AppResult<String> {
+    let root = state.active_folder_path()?;
+    fs::read_image_data_url(&root, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_save_draft(path: String, content: String, state: State<'_, AppState>) -> AppResult<DraftDto> {
+    let root = state.active_folder_path()?;
+    fs::save_draft(&root, &state.xdg.cache_dir, Path::new(&path), &content)
+}
+
+#[tauri::command]
+fn fs_load_draft(path: String, state: State<'_, AppState>) -> AppResult<Option<DraftDto>> {
+    let root = state.active_folder_path()?;
+    fs::load_draft(&root, &state.xdg.cache_dir, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_clear_draft(path: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    fs::clear_draft(&root, &state.xdg.cache_dir, Path::new(&path))
 }
 
 #[tauri::command]
@@ -216,6 +246,11 @@ pub fn run() {
             fs_create_dir,
             fs_rename,
             fs_trash,
+            fs_list_workspace_files,
+            fs_read_image_data_url,
+            fs_save_draft,
+            fs_load_draft,
+            fs_clear_draft,
             reveal_in_file_manager,
             open_external
         ]);

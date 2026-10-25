@@ -48,6 +48,12 @@ export interface WriteResultDto {
   changed: boolean;
 }
 
+export interface DraftDto {
+  path: string;
+  content: string;
+  savedAtMs: number;
+}
+
 export interface BackendEventMap {
   'pty:output': { sessionId: string; data: string };
   'pty:exit': { sessionId: string; code: number | null };
@@ -156,6 +162,26 @@ export async function fsRename(fromPath: string, toPath: string): Promise<string
 
 export async function fsTrash(path: string): Promise<void> {
   return callCommand<void>('fs_trash', { path });
+}
+
+export async function fsListWorkspaceFiles(): Promise<string[]> {
+  return callCommand<string[]>('fs_list_workspace_files');
+}
+
+export async function fsReadImageDataUrl(path: string): Promise<string> {
+  return callCommand<string>('fs_read_image_data_url', { path });
+}
+
+export async function fsSaveDraft(path: string, content: string): Promise<DraftDto> {
+  return callCommand<DraftDto>('fs_save_draft', { path, content });
+}
+
+export async function fsLoadDraft(path: string): Promise<DraftDto | null> {
+  return callCommand<DraftDto | null>('fs_load_draft', { path });
+}
+
+export async function fsClearDraft(path: string): Promise<void> {
+  return callCommand<void>('fs_clear_draft', { path });
 }
 
 export async function revealInFileManager(path: string): Promise<void> {

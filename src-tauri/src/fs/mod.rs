@@ -12,6 +12,15 @@ use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 pub const DEFAULT_IGNORE_NAMES: &[&str] = &[".git", "node_modules", "target"];
+const MAX_WORKSPACE_FILES: usize = 20_000;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftDto {
+    pub path: String,
+    pub content: String,
+    pub saved_at_ms: u64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -402,6 +411,188 @@ pub fn trash_entry(workspace_root: &Path, target_path: &Path) -> AppResult<()> {
     trash::delete(&target).map_err(|e| AppError::ExternalCommand(e.to_string()))
 }
 
+pub fn list_workspace_files(
+    workspace_root: &Path,
+    ignore_names: &[&str],
+) -> AppResult<Vec<String>> {
+    let canonical_root = workspace_root.canonicalize()?;
+    let mut files = Vec::new();
+    collect_files_recursive(
+        &canonical_root,
+        &canonical_root,
+        ignore_names,
+        &mut files,
+        MAX_WORKSPACE_FILES,
+    )?;
+    files.sort_by(|a, b| {
+        a.to_lowercase()
+            .cmp(&b.to_lowercase())
+            .then_with(|| a.cmp(b))
+    });
+    Ok(files)
+}
+
+fn collect_files_recursive(
+    canonical_root: &Path,
+    current_dir: &Path,
+    ignore_names: &[&str],
+    out: &mut Vec<String>,
+    limit: usize,
+) -> AppResult<()> {
+    if out.len() >= limit {
+        return Ok(());
+    }
+
+    let read_dir = match fs::read_dir(current_dir) {
+        Ok(rd) => rd,
+        Err(_) => return Ok(()),
+    };
+
+    for entry_res in read_dir {
+        if out.len() >= limit {
+            break;
+        }
+        let entry = match entry_res {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if ignore_names.contains(&name.as_str()) {
+            continue;
+        }
+
+        let path = entry.path();
+        let sym_meta = match fs::symlink_metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if sym_meta.file_type().is_symlink() {
+            continue;
+        }
+
+        if sym_meta.is_dir() {
+            collect_files_recursive(canonical_root, &path, ignore_names, out, limit)?;
+        } else if sym_meta.is_file() {
+            out.push(to_rel_path_string(canonical_root, &path));
+        }
+    }
+
+    Ok(())
+}
+
+pub fn read_image_data_url(workspace_root: &Path, file_path: &Path) -> AppResult<String> {
+    let canonical_root = workspace_root.canonicalize()?;
+    let target = resolve_existing_in_workspace(&canonical_root, file_path)?;
+    let ext = target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "svg" => "image/svg+xml",
+        _ => {
+            return Err(AppError::Validation(format!(
+                "unsupported image extension: {}",
+                ext
+            )))
+        }
+    };
+
+    let bytes = fs::read(&target)?;
+    let encoded = base64_encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, encoded))
+}
+
+fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+
+        out.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[(triple & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+
+    out
+}
+
+fn draft_file_for_target(cache_dir: &Path, canonical_target: &Path) -> PathBuf {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in canonical_target.to_string_lossy().as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    cache_dir.join("drafts").join(format!("{:016x}.json", hash))
+}
+
+pub fn save_draft(
+    workspace_root: &Path,
+    cache_dir: &Path,
+    file_path: &Path,
+    content: &str,
+) -> AppResult<DraftDto> {
+    let target = resolve_target_in_workspace(workspace_root, file_path)?;
+    let draft_path = draft_file_for_target(cache_dir, &target);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let dto = DraftDto {
+        path: target.to_string_lossy().into_owned(),
+        content: content.to_string(),
+        saved_at_ms: now_ms,
+    };
+
+    let bytes = serde_json::to_vec(&dto)?;
+    crate::state::atomic_write_bytes(&draft_path, &bytes)?;
+    Ok(dto)
+}
+
+pub fn load_draft(
+    workspace_root: &Path,
+    cache_dir: &Path,
+    file_path: &Path,
+) -> AppResult<Option<DraftDto>> {
+    let target = resolve_target_in_workspace(workspace_root, file_path)?;
+    let draft_path = draft_file_for_target(cache_dir, &target);
+    if !draft_path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(&draft_path)?;
+    let dto: DraftDto = serde_json::from_str(&raw)?;
+    Ok(Some(dto))
+}
+
+pub fn clear_draft(workspace_root: &Path, cache_dir: &Path, file_path: &Path) -> AppResult<()> {
+    let target = resolve_target_in_workspace(workspace_root, file_path)?;
+    let draft_path = draft_file_for_target(cache_dir, &target);
+    if draft_path.exists() {
+        fs::remove_file(&draft_path)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,6 +703,34 @@ mod tests {
             read_link_err,
             Err(AppError::PathOutsideWorkspace(_))
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn lists_workspace_files_and_manages_draft_lifecycle() -> AppResult<()> {
+        let tmp = TempDir::new()?;
+        let ws = tmp.path().join("ws");
+        let cache = tmp.path().join("cache");
+        fs::create_dir_all(ws.join("src"))?;
+        fs::create_dir_all(ws.join("node_modules/pkg"))?;
+        fs::write(ws.join("src/main.rs"), "fn main() {}\n")?;
+        fs::write(ws.join("node_modules/pkg/index.js"), "export {};\n")?;
+        fs::write(ws.join("icon.svg"), "<svg></svg>")?;
+
+        let all_files = list_workspace_files(&ws, DEFAULT_IGNORE_NAMES)?;
+        assert_eq!(all_files, vec!["icon.svg", "src/main.rs"]);
+
+        let data_url = read_image_data_url(&ws, Path::new("icon.svg"))?;
+        assert!(data_url.starts_with("data:image/svg+xml;base64,"));
+
+        let saved = save_draft(&ws, &cache, Path::new("src/main.rs"), "fn main() { 42 }\n")?;
+        assert_eq!(saved.content, "fn main() { 42 }\n");
+
+        let loaded = load_draft(&ws, &cache, Path::new("src/main.rs"))?;
+        assert_eq!(loaded, Some(saved));
+
+        clear_draft(&ws, &cache, Path::new("src/main.rs"))?;
+        assert_eq!(load_draft(&ws, &cache, Path::new("src/main.rs"))?, None);
         Ok(())
     }
 }
