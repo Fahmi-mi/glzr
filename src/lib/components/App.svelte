@@ -2,21 +2,27 @@
   import { onMount } from 'svelte';
   import FileText from '@lucide/svelte/icons/file-text';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
+  import GitBranch from '@lucide/svelte/icons/git-branch';
+  import GitCompare from '@lucide/svelte/icons/git-compare';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
   import Terminal from '@lucide/svelte/icons/terminal';
   import X from '@lucide/svelte/icons/x';
   import {
     fsClearDraft,
+    gitStatus,
     normalizeTabPath,
     pickProjectFolderDialog,
     projectGetState,
     projectOpenFolder,
     type AppErrorPayload,
+    type GitStatusDto,
     type ProjectStateDto
   } from '$lib/ipc';
   import { createInitialSession, type Pane, type SessionFile, type Tab } from '$lib/layout/types';
   import QuickOpen from '$lib/components/QuickOpen.svelte';
+  import GitPanel from '$lib/components/sidebar/GitPanel.svelte';
+  import DiffTab from '$lib/components/tabs/DiffTab.svelte';
   import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
 
   let projectState = $state<ProjectStateDto>({
@@ -34,6 +40,8 @@
   let tabMetaMap = $state<Record<string, FileTabMeta>>({});
   let pendingCloseTabId = $state<string | null>(null);
   let activeFileTabRef = $state<ReturnType<typeof FileTab> | null>(null);
+  let gitPanelRef = $state<ReturnType<typeof GitPanel> | null>(null);
+  let repoStatus = $state<GitStatusDto | null>(null);
   let tabCounter = $state(2);
 
   const activeWorkspace = $derived(
@@ -52,12 +60,25 @@
     activeTab && activeTab.kind === 'file' ? (tabMetaMap[activeTab.id] ?? null) : null
   );
 
+  async function refreshRepoStatus() {
+    if (!projectState.activeFolder) {
+      repoStatus = null;
+      return;
+    }
+    if (gitPanelRef) {
+      await gitPanelRef.refresh();
+    } else {
+      repoStatus = await gitStatus().catch(() => null);
+    }
+  }
+
   onMount(async () => {
     try {
       const state = await projectGetState();
       projectState = state;
       if (state.activeFolder) {
         session = createInitialSession(state.activeFolder);
+        await refreshRepoStatus();
       }
     } catch {
       projectState = {
@@ -69,6 +90,18 @@
       loading = false;
     }
   });
+
+  function toggleGitSidebar() {
+    if (session.sidebar.visible && session.sidebar.panel === 'git') {
+      session.sidebar.visible = false;
+    } else {
+      session.sidebar.visible = true;
+      session.sidebar.panel = 'git';
+      queueMicrotask(() => {
+        gitPanelRef?.focusInput();
+      });
+    }
+  }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (!projectState.activeFolder) return;
@@ -85,9 +118,19 @@
       return;
     }
 
+    const isAltV =
+      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'v';
+    if (isAltV) {
+      event.preventDefault();
+      toggleGitSidebar();
+      return;
+    }
+
     const isCtrlW =
       (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'w';
-    if (isCtrlW && activeTab) {
+    const isAltW =
+      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'w';
+    if ((isCtrlW || isAltW) && activeTab) {
       event.preventDefault();
       requestCloseTab(activeTab.id);
     }
@@ -115,6 +158,7 @@
       dirtyTabs = {};
       tabMetaMap = {};
       pendingCloseTabId = null;
+      await refreshRepoStatus();
     } catch (err) {
       const normalized = err as AppErrorPayload;
       errorMessage = normalized.message ?? 'Gagal membuka folder proyek';
@@ -154,6 +198,40 @@
       data: {
         path: normalizedTarget,
         line
+      }
+    };
+
+    rootPane.tabs.push(newTab);
+    rootPane.activeTabId = newId;
+  }
+
+  export function openDiffInPane(relPath: string, staged: boolean) {
+    if (!rootPane) return;
+    const normalizedRel = normalizeTabPath(relPath);
+
+    const existing = rootPane.tabs.find(
+      (t) => t.kind === 'diff' && normalizeTabPath(String(t.data.relPath ?? '')) === normalizedRel
+    );
+
+    if (existing) {
+      existing.data = {
+        ...existing.data,
+        relPath: normalizedRel,
+        staged
+      };
+      rootPane.activeTabId = existing.id;
+      return;
+    }
+
+    tabCounter += 1;
+    const newId = `tab-${tabCounter}`;
+    const newTab: Tab = {
+      id: newId,
+      kind: 'diff',
+      title: `${extractBaseName(normalizedRel)} (diff)`,
+      data: {
+        relPath: normalizedRel,
+        staged
       }
     };
 
@@ -292,6 +370,15 @@
       <div class="workspace-actions">
         <button
           class="folder-switch"
+          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'git'}
+          title="Panel Git (Alt+V)"
+          onclick={toggleGitSidebar}
+        >
+          <GitBranch size={14} strokeWidth={2} />
+          <span>Git</span>
+        </button>
+        <button
+          class="folder-switch"
           title="Buka Cepat File (Alt+O)"
           onclick={() => (quickOpenVisible = true)}
         >
@@ -306,6 +393,16 @@
     </header>
 
     <div class="workbench">
+      {#if session.sidebar.visible && session.sidebar.panel === 'git'}
+        <div class="sidebar-shell" style:width="{session.sidebar.width}px">
+          <GitPanel
+            bind:this={gitPanelRef}
+            onOpenDiff={(relPath, staged) => openDiffInPane(relPath, staged)}
+            onStatusUpdated={(st) => (repoStatus = st)}
+          />
+        </div>
+      {/if}
+
       <section class="pane focused">
         {#if rootPane}
           <div class="tab-strip">
@@ -318,6 +415,8 @@
                 >
                   {#if tab.kind === 'file'}
                     <FileText size={14} strokeWidth={2} />
+                  {:else if tab.kind === 'diff'}
+                    <GitCompare size={14} strokeWidth={2} />
                   {:else}
                     <Terminal size={14} strokeWidth={2} />
                   {/if}
@@ -328,7 +427,7 @@
                 </button>
                 <button
                   class="tab-close-btn"
-                  title="Tutup tab (Ctrl+W)"
+                  title="Tutup tab (Alt+W)"
                   aria-label="Tutup tab"
                   onclick={(e) => {
                     e.stopPropagation();
@@ -370,7 +469,10 @@
             </div>
           </div>
 
-          <div class="pane-body" class:no-pad={activeTab?.kind === 'file'}>
+          <div
+            class="pane-body"
+            class:no-pad={activeTab?.kind === 'file' || activeTab?.kind === 'diff'}
+          >
             {#if activeTab}
               {#if activeTab.kind === 'file' && typeof activeTab.data.path === 'string'}
                 {#key activeTab.id}
@@ -382,10 +484,26 @@
                       : null}
                     onDirtyChange={(dirty) => {
                       dirtyTabs[activeTab.id] = dirty;
+                      if (!dirty) {
+                        void refreshRepoStatus();
+                      }
                     }}
                     onMetaChange={(meta) => {
                       tabMetaMap[activeTab.id] = meta;
                     }}
+                  />
+                {/key}
+              {:else if activeTab.kind === 'diff' && typeof activeTab.data.relPath === 'string'}
+                {#key activeTab.id}
+                  <DiffTab
+                    relPath={activeTab.data.relPath}
+                    initialStaged={Boolean(activeTab.data.staged)}
+                    onOpenFile={(relPath, line) => {
+                      if (projectState.activeFolder) {
+                        openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
+                      }
+                    }}
+                    onChanged={() => void refreshRepoStatus()}
                   />
                 {/key}
               {:else}
@@ -402,6 +520,15 @@
     <footer class="status-bar">
       <div class="status-left">
         <span>{projectState.folderName ?? 'proyek'}</span>
+        {#if repoStatus?.isRepo}
+          <span class="status-branch">
+            <GitBranch size={12} strokeWidth={2} />
+            <span>{repoStatus.detached ? 'detached' : (repoStatus.branch ?? 'main')}</span>
+            {#if repoStatus.ahead > 0 || repoStatus.behind > 0}
+              <span class="mono">+{repoStatus.ahead} -{repoStatus.behind}</span>
+            {/if}
+          </span>
+        {/if}
       </div>
       <div class="status-right">
         {#if activeFileMeta}
@@ -570,6 +697,11 @@
     color: var(--dm);
   }
 
+  .folder-switch.active-toggle {
+    background: var(--acs);
+    color: var(--ac);
+  }
+
   .icon-btn {
     width: 26px;
     height: 26px;
@@ -581,6 +713,13 @@
   .workbench {
     flex: 1;
     display: flex;
+    min-height: 0;
+  }
+
+  .sidebar-shell {
+    height: 100%;
+    border-right: 1px solid var(--bd);
+    flex-shrink: 0;
     min-height: 0;
   }
 
@@ -728,6 +867,13 @@
     display: flex;
     align-items: center;
     gap: 20px;
+  }
+
+  .status-branch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--tx);
   }
 
   .modal-backdrop {
