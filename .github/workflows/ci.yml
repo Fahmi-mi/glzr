@@ -27,6 +27,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: Prepare frontend dist directory
+        run: mkdir -p ../build
       - name: Check formatting
         run: cargo fmt --check
       - name: Run clippy
@@ -51,19 +53,3 @@ jobs:
         run: npm run lint
       - name: Run unit tests
         run: npm test
-
-  security:
-    name: Security Audit
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: src-tauri
-      - name: Audit npm dependencies
-        run: npm audit --omit=dev

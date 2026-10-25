@@ -3,5 +3,6 @@ build/
 dist/
 node_modules/
 src-tauri/
+static/
 docs/
 package-lock.json

@@ -13,26 +13,26 @@ Terminal-first workspace yang ringan untuk Linux: terminal, editor file, git pan
 
 ## Ukuran dan Penggunaan RAM
 
-*(Akan diisi setelah pengukuran build release menggunakan `smem -P glzr`)*
+_(Akan diisi setelah pengukuran build release menggunakan `smem -P glzr`)_
 
-| Metrik | Target | Hasil Pengukuran |
-|---|---|---|
-| Ukuran Installer | 12-25 MB | TBD |
-| RAM Baseline (1 terminal) | 80-150 MB | TBD |
-| Sesi Harian Wajar | 150-250 MB | TBD |
+| Metrik                    | Target     | Hasil Pengukuran |
+| ------------------------- | ---------- | ---------------- |
+| Ukuran Installer          | 12-25 MB   | TBD              |
+| RAM Baseline (1 terminal) | 80-150 MB  | TBD              |
+| Sesi Harian Wajar         | 150-250 MB | TBD              |
 
 ## Keybind Ringkas
 
-| Aksi | Shortcut |
-|---|---|
-| Command Palette | `Alt+P` |
-| Quick Open File | `Alt+O` |
+| Aksi                         | Shortcut                    |
+| ---------------------------- | --------------------------- |
+| Command Palette              | `Alt+P`                     |
+| Quick Open File              | `Alt+O`                     |
 | Sidebar Files / Git / Search | `Alt+E` / `Alt+V` / `Alt+G` |
-| Terminal Baru | `Alt+T` |
-| Tutup Tab Aktif | `Alt+W` |
-| Split Kanan / Bawah | `Alt+R` / `Alt+J` |
-| Tutup / Maximize Pane | `Alt+Q` / `Alt+M` |
-| Pindah Workspace 1-9 | `Alt+1` .. `Alt+9` |
+| Terminal Baru                | `Alt+T`                     |
+| Tutup Tab Aktif              | `Alt+W`                     |
+| Split Kanan / Bawah          | `Alt+R` / `Alt+J`           |
+| Tutup / Maximize Pane        | `Alt+Q` / `Alt+M`           |
+| Pindah Workspace 1-9         | `Alt+1` .. `Alt+9`          |
 
 ## Build dari Sumber
 
