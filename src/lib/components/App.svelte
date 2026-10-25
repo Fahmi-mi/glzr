@@ -1,12 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import FileText from '@lucide/svelte/icons/file-text';
+  import { onDestroy, onMount } from 'svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import GitBranch from '@lucide/svelte/icons/git-branch';
-  import GitCompare from '@lucide/svelte/icons/git-compare';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
-  import Terminal from '@lucide/svelte/icons/terminal';
   import X from '@lucide/svelte/icons/x';
   import {
     fsClearDraft,
@@ -15,16 +12,34 @@
     pickProjectFolderDialog,
     projectGetState,
     projectOpenFolder,
+    sessionLoad,
+    sessionSave,
     type AppErrorPayload,
     type GitStatusDto,
     type ProjectStateDto
   } from '$lib/ipc';
-  import { createInitialSession, type Pane, type SessionFile, type Tab } from '$lib/layout/types';
+  import {
+    closePane,
+    findDirectionalNeighborPane,
+    findPaneById,
+    getFirstPaneId,
+    migrateAndSanitizeSession,
+    moveTabBetweenPanes,
+    splitPane,
+    updateSplitRatioByPath
+  } from '$lib/layout/tree';
+  import {
+    createInitialSession,
+    createInitialWorkspace,
+    type Pane,
+    type SessionFile,
+    type Tab
+  } from '$lib/layout/types';
+  import PaneNode from '$lib/components/PaneNode.svelte';
   import QuickOpen from '$lib/components/QuickOpen.svelte';
   import GitPanel from '$lib/components/sidebar/GitPanel.svelte';
-  import DiffTab from '$lib/components/tabs/DiffTab.svelte';
-  import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
-  import TerminalTab from '$lib/components/tabs/TerminalTab.svelte';
+  import type { FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
+  import type FileTab from '$lib/components/tabs/FileTab.svelte';
 
   let projectState = $state<ProjectStateDto>({
     activeFolder: null,
@@ -33,33 +48,73 @@
   });
   let session = $state<SessionFile>(createInitialSession(null));
   let errorMessage = $state<string | null>(null);
+  let sessionNotice = $state<string | null>(null);
   let loading = $state(true);
   let quickOpenVisible = $state(false);
-  let newTabMenuOpen = $state(false);
+
+  let focusedPaneByWs = $state<Record<string, string>>({});
+  let maximizedPaneByWs = $state<Record<string, string | null>>({});
+  let renamingWsId = $state<string | null>(null);
+  let renameInputText = $state('');
 
   let dirtyTabs = $state<Record<string, boolean>>({});
   let tabMetaMap = $state<Record<string, FileTabMeta>>({});
-  let pendingCloseTabId = $state<string | null>(null);
-  let activeFileTabRef = $state<ReturnType<typeof FileTab> | null>(null);
+  let fileTabRefs = $state<Record<string, ReturnType<typeof FileTab> | null>>({});
+  let pendingClose = $state<{ paneId: string; tabId: string } | null>(null);
   let gitPanelRef = $state<ReturnType<typeof GitPanel> | null>(null);
   let repoStatus = $state<GitStatusDto | null>(null);
-  let tabCounter = $state(2);
+
+  let idSeq = $state(100);
+  let saveSessionTimer: ReturnType<typeof setTimeout> | null = null;
+  let sessionReady = $state(false);
 
   const activeWorkspace = $derived(
     session.workspaces.find((w) => w.id === session.activeWorkspaceId) ?? session.workspaces[0]
   );
 
-  const rootPane = $derived<Pane | null>(
-    activeWorkspace && activeWorkspace.root.type === 'pane' ? activeWorkspace.root : null
+  const focusedPaneId = $derived<string>(
+    activeWorkspace
+      ? (focusedPaneByWs[activeWorkspace.id] ?? getFirstPaneId(activeWorkspace.root))
+      : ''
+  );
+
+  const focusedPane = $derived<Pane | null>(
+    activeWorkspace ? findPaneById(activeWorkspace.root, focusedPaneId) : null
   );
 
   const activeTab = $derived<Tab | null>(
-    rootPane?.tabs.find((t) => t.id === rootPane.activeTabId) ?? rootPane?.tabs[0] ?? null
+    focusedPane?.tabs.find((t) => t.id === focusedPane.activeTabId) ?? focusedPane?.tabs[0] ?? null
   );
 
   const activeFileMeta = $derived<FileTabMeta | null>(
     activeTab && activeTab.kind === 'file' ? (tabMetaMap[activeTab.id] ?? null) : null
   );
+
+  function nextId(prefix: string): string {
+    idSeq += 1;
+    return `${prefix}-${Date.now().toString(36)}-${idSeq}`;
+  }
+
+  function scheduleSessionSave() {
+    if (!sessionReady || !projectState.activeFolder) return;
+    if (saveSessionTimer !== null) {
+      clearTimeout(saveSessionTimer);
+    }
+    const snapshot = JSON.stringify({
+      ...session,
+      folder: projectState.activeFolder
+    });
+    saveSessionTimer = setTimeout(() => {
+      void sessionSave(snapshot).catch(() => {});
+    }, 400);
+  }
+
+  $effect(() => {
+    if (sessionReady && projectState.activeFolder) {
+      void JSON.stringify(session);
+      scheduleSessionSave();
+    }
+  });
 
   async function refreshRepoStatus() {
     if (!projectState.activeFolder) {
@@ -75,10 +130,32 @@
 
   onMount(async () => {
     try {
-      const state = await projectGetState();
+      const [state, loadedSession] = await Promise.all([
+        projectGetState(),
+        sessionLoad().catch(() => ({ rawJson: null, backedUpCorrupt: false }))
+      ]);
       projectState = state;
+      if (loadedSession.backedUpCorrupt) {
+        sessionNotice =
+          'File sesi sebelumnya tidak kompatibel atau rusak dan telah dicadangkan ke session.json.bak.';
+      }
+
       if (state.activeFolder) {
-        session = createInitialSession(state.activeFolder);
+        if (loadedSession.rawJson) {
+          try {
+            const parsed = JSON.parse(loadedSession.rawJson);
+            const restored = migrateAndSanitizeSession(parsed, state.activeFolder);
+            if (!restored.folder || restored.folder === state.activeFolder) {
+              session = { ...restored, folder: state.activeFolder };
+            } else {
+              session = createInitialSession(state.activeFolder);
+            }
+          } catch {
+            session = createInitialSession(state.activeFolder);
+          }
+        } else {
+          session = createInitialSession(state.activeFolder);
+        }
         await refreshRepoStatus();
       }
     } catch {
@@ -89,8 +166,21 @@
       };
     } finally {
       loading = false;
+      sessionReady = true;
     }
   });
+
+  onDestroy(() => {
+    if (saveSessionTimer !== null) {
+      clearTimeout(saveSessionTimer);
+      saveSessionTimer = null;
+    }
+  });
+
+  function setFocusedPane(paneId: string) {
+    if (!activeWorkspace) return;
+    focusedPaneByWs[activeWorkspace.id] = paneId;
+  }
 
   function toggleGitSidebar() {
     if (session.sidebar.visible && session.sidebar.panel === 'git') {
@@ -104,62 +194,171 @@
     }
   }
 
+  function handleSplitPane(paneId: string, direction: 'row' | 'column') {
+    if (!activeWorkspace) return;
+    const newPaneId = nextId('pane');
+    activeWorkspace.root = splitPane(activeWorkspace.root, paneId, direction, newPaneId);
+    maximizedPaneByWs[activeWorkspace.id] = null;
+    focusedPaneByWs[activeWorkspace.id] = newPaneId;
+  }
+
+  function handleClosePane(paneId: string) {
+    if (!activeWorkspace) return;
+    const targetPane = findPaneById(activeWorkspace.root, paneId);
+    if (!targetPane) return;
+
+    const dirtyTab = targetPane.tabs.find((t) => dirtyTabs[t.id]);
+    if (dirtyTab) {
+      pendingClose = { paneId, tabId: dirtyTab.id };
+      return;
+    }
+
+    const res = closePane(activeWorkspace.root, paneId);
+    if (res) {
+      activeWorkspace.root = res.root;
+      maximizedPaneByWs[activeWorkspace.id] = null;
+      focusedPaneByWs[activeWorkspace.id] = res.nextFocusPaneId;
+    }
+  }
+
+  function handleToggleMaximizePane(paneId: string) {
+    if (!activeWorkspace) return;
+    const current = maximizedPaneByWs[activeWorkspace.id] ?? null;
+    maximizedPaneByWs[activeWorkspace.id] = current === paneId ? null : paneId;
+    focusedPaneByWs[activeWorkspace.id] = paneId;
+  }
+
+  function handleAddWorkspace() {
+    const num = session.workspaces.length + 1;
+    const wsId = nextId('ws');
+    const newWs = createInitialWorkspace(wsId, `${num} Ruang`, projectState.activeFolder ?? '');
+    session.workspaces.push(newWs);
+    session.activeWorkspaceId = wsId;
+  }
+
+  function handleCloseWorkspace(wsId: string) {
+    if (session.workspaces.length <= 1) return;
+    const idx = session.workspaces.findIndex((w) => w.id === wsId);
+    if (idx === -1) return;
+    session.workspaces.splice(idx, 1);
+    if (session.activeWorkspaceId === wsId) {
+      const nextIdx = Math.min(idx, session.workspaces.length - 1);
+      session.activeWorkspaceId = session.workspaces[nextIdx].id;
+    }
+  }
+
+  function commitWorkspaceRename(wsId: string) {
+    const trimmed = renameInputText.trim();
+    const target = session.workspaces.find((w) => w.id === wsId);
+    if (target && trimmed) {
+      target.name = trimmed;
+    }
+    renamingWsId = null;
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
-    if (!projectState.activeFolder) return;
+    if (!projectState.activeFolder || !activeWorkspace) return;
 
     const terminalFocused = activeTab?.kind === 'terminal';
+    const altOnly = event.altKey && !event.ctrlKey && !event.metaKey;
+    const keyLower = event.key.toLowerCase();
 
-    const isAltO =
-      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'o';
+    const isAltO = altOnly && keyLower === 'o';
     const isCtrlP =
-      !terminalFocused &&
-      (event.ctrlKey || event.metaKey) &&
-      !event.altKey &&
-      event.key.toLowerCase() === 'p';
+      !terminalFocused && (event.ctrlKey || event.metaKey) && !event.altKey && keyLower === 'p';
 
     if (isAltO || isCtrlP) {
       event.preventDefault();
       quickOpenVisible = true;
-      newTabMenuOpen = false;
       return;
     }
 
-    const isAltV =
-      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'v';
-    if (isAltV) {
+    if (altOnly && keyLower === 'v') {
       event.preventDefault();
       toggleGitSidebar();
       return;
     }
 
-    const isAltT =
-      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 't';
-    if (isAltT) {
+    if (altOnly && keyLower === 't') {
       event.preventDefault();
-      addTerminalTab();
+      addTerminalTab(focusedPaneId);
+      return;
+    }
+
+    if (altOnly && keyLower === 'r') {
+      event.preventDefault();
+      handleSplitPane(focusedPaneId, 'row');
+      return;
+    }
+
+    if (altOnly && keyLower === 'j') {
+      event.preventDefault();
+      handleSplitPane(focusedPaneId, 'column');
+      return;
+    }
+
+    if (altOnly && keyLower === 'q') {
+      event.preventDefault();
+      handleClosePane(focusedPaneId);
+      return;
+    }
+
+    if (altOnly && keyLower === 'm') {
+      event.preventDefault();
+      handleToggleMaximizePane(focusedPaneId);
+      return;
+    }
+
+    if (
+      altOnly &&
+      (event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown')
+    ) {
+      event.preventDefault();
+      const dirMap: Record<string, 'left' | 'right' | 'up' | 'down'> = {
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+        ArrowUp: 'up',
+        ArrowDown: 'down'
+      };
+      const neighbor = findDirectionalNeighborPane(
+        activeWorkspace.root,
+        focusedPaneId,
+        dirMap[event.key]
+      );
+      if (neighbor) {
+        setFocusedPane(neighbor);
+      }
+      return;
+    }
+
+    if (altOnly && /^[1-9]$/.test(event.key)) {
+      const idx = Number.parseInt(event.key, 10) - 1;
+      if (idx >= 0 && idx < session.workspaces.length) {
+        event.preventDefault();
+        session.activeWorkspaceId = session.workspaces[idx].id;
+      }
       return;
     }
 
     const isCtrlW =
-      !terminalFocused &&
-      (event.ctrlKey || event.metaKey) &&
-      !event.altKey &&
-      event.key.toLowerCase() === 'w';
-    const isAltW =
-      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'w';
-    if ((isCtrlW || isAltW) && activeTab) {
+      !terminalFocused && (event.ctrlKey || event.metaKey) && !event.altKey && keyLower === 'w';
+    const isAltW = altOnly && keyLower === 'w';
+    if ((isCtrlW || isAltW) && focusedPane && activeTab) {
       event.preventDefault();
-      requestCloseTab(activeTab.id);
+      requestCloseTab(focusedPane.id, activeTab.id);
       return;
     }
 
-    if (event.altKey && !event.ctrlKey && !event.metaKey && rootPane && rootPane.tabs.length > 1) {
+    if (altOnly && focusedPane && focusedPane.tabs.length > 1) {
       if (event.key === 'PageDown' || event.key === 'PageUp') {
         event.preventDefault();
-        const curIdx = rootPane.tabs.findIndex((t) => t.id === rootPane.activeTabId);
+        const curIdx = focusedPane.tabs.findIndex((t) => t.id === focusedPane.activeTabId);
         const delta = event.key === 'PageDown' ? 1 : -1;
-        const nextIdx = (curIdx + delta + rootPane.tabs.length) % rootPane.tabs.length;
-        rootPane.activeTabId = rootPane.tabs[nextIdx].id;
+        const nextIdx = (curIdx + delta + focusedPane.tabs.length) % focusedPane.tabs.length;
+        focusedPane.activeTabId = focusedPane.tabs[nextIdx].id;
       }
     }
   }
@@ -183,9 +382,11 @@
       const updated = await projectOpenFolder(path);
       projectState = updated;
       session = createInitialSession(updated.activeFolder);
+      focusedPaneByWs = {};
+      maximizedPaneByWs = {};
       dirtyTabs = {};
       tabMetaMap = {};
-      pendingCloseTabId = null;
+      pendingClose = null;
       await refreshRepoStatus();
     } catch (err) {
       const normalized = err as AppErrorPayload;
@@ -199,11 +400,17 @@
     return idx === -1 ? normalized : normalized.slice(idx + 1);
   }
 
-  export function openFileInPane(fullPath: string, line: number | null = null) {
-    if (!rootPane) return;
-    const normalizedTarget = normalizeTabPath(fullPath);
+  export function openFileInPane(
+    fullPath: string,
+    line: number | null = null,
+    targetPaneId?: string
+  ) {
+    if (!activeWorkspace) return;
+    const pane = findPaneById(activeWorkspace.root, targetPaneId ?? focusedPaneId);
+    if (!pane) return;
 
-    const existing = rootPane.tabs.find(
+    const normalizedTarget = normalizeTabPath(fullPath);
+    const existing = pane.tabs.find(
       (t) => t.kind === 'file' && normalizeTabPath(String(t.data.path ?? '')) === normalizedTarget
     );
 
@@ -213,12 +420,12 @@
         path: normalizedTarget,
         line
       };
-      rootPane.activeTabId = existing.id;
+      pane.activeTabId = existing.id;
+      setFocusedPane(pane.id);
       return;
     }
 
-    tabCounter += 1;
-    const newId = `tab-${tabCounter}`;
+    const newId = nextId('tab');
     const newTab: Tab = {
       id: newId,
       kind: 'file',
@@ -229,15 +436,18 @@
       }
     };
 
-    rootPane.tabs.push(newTab);
-    rootPane.activeTabId = newId;
+    pane.tabs.push(newTab);
+    pane.activeTabId = newId;
+    setFocusedPane(pane.id);
   }
 
   export function openDiffInPane(relPath: string, staged: boolean) {
-    if (!rootPane) return;
-    const normalizedRel = normalizeTabPath(relPath);
+    if (!activeWorkspace) return;
+    const pane = findPaneById(activeWorkspace.root, focusedPaneId);
+    if (!pane) return;
 
-    const existing = rootPane.tabs.find(
+    const normalizedRel = normalizeTabPath(relPath);
+    const existing = pane.tabs.find(
       (t) => t.kind === 'diff' && normalizeTabPath(String(t.data.relPath ?? '')) === normalizedRel
     );
 
@@ -247,12 +457,11 @@
         relPath: normalizedRel,
         staged
       };
-      rootPane.activeTabId = existing.id;
+      pane.activeTabId = existing.id;
       return;
     }
 
-    tabCounter += 1;
-    const newId = `tab-${tabCounter}`;
+    const newId = nextId('tab');
     const newTab: Tab = {
       id: newId,
       kind: 'diff',
@@ -263,78 +472,88 @@
       }
     };
 
-    rootPane.tabs.push(newTab);
-    rootPane.activeTabId = newId;
+    pane.tabs.push(newTab);
+    pane.activeTabId = newId;
   }
 
-  function addTerminalTab() {
-    if (!rootPane) return;
-    tabCounter += 1;
-    const newId = `tab-${tabCounter}`;
-    rootPane.tabs.push({
+  function addTerminalTab(paneId: string) {
+    if (!activeWorkspace) return;
+    const pane = findPaneById(activeWorkspace.root, paneId);
+    if (!pane) return;
+
+    const newId = nextId('tab');
+    pane.tabs.push({
       id: newId,
       kind: 'terminal',
       title: 'shell',
       data: { cwd: projectState.activeFolder ?? '' }
     });
-    rootPane.activeTabId = newId;
-    newTabMenuOpen = false;
+    pane.activeTabId = newId;
+    setFocusedPane(pane.id);
   }
 
-  function requestCloseTab(tabId: string) {
+  function requestCloseTab(paneId: string, tabId: string) {
     if (dirtyTabs[tabId]) {
-      pendingCloseTabId = tabId;
+      pendingClose = { paneId, tabId };
       return;
     }
-    forceCloseTab(tabId);
+    forceCloseTab(paneId, tabId);
   }
 
-  function forceCloseTab(tabId: string) {
-    if (!rootPane) return;
-    const index = rootPane.tabs.findIndex((t) => t.id === tabId);
+  function forceCloseTab(paneId: string, tabId: string) {
+    if (!activeWorkspace) return;
+    const pane = findPaneById(activeWorkspace.root, paneId);
+    if (!pane) return;
+
+    const index = pane.tabs.findIndex((t) => t.id === tabId);
     if (index === -1) return;
 
-    const targetTab = rootPane.tabs[index];
+    const targetTab = pane.tabs[index];
     if (targetTab.kind === 'file' && typeof targetTab.data.path === 'string') {
       void fsClearDraft(targetTab.data.path).catch(() => {});
     }
 
-    rootPane.tabs.splice(index, 1);
+    pane.tabs.splice(index, 1);
     delete dirtyTabs[tabId];
     delete tabMetaMap[tabId];
+    delete fileTabRefs[tabId];
 
-    if (rootPane.tabs.length === 0) {
-      addTerminalTab();
-    } else if (rootPane.activeTabId === tabId) {
-      const nextIdx = Math.min(index, rootPane.tabs.length - 1);
-      rootPane.activeTabId = rootPane.tabs[nextIdx].id;
+    if (pane.tabs.length === 0) {
+      const collapsed = closePane(activeWorkspace.root, paneId);
+      if (collapsed) {
+        activeWorkspace.root = collapsed.root;
+        maximizedPaneByWs[activeWorkspace.id] = null;
+        focusedPaneByWs[activeWorkspace.id] = collapsed.nextFocusPaneId;
+      } else {
+        addTerminalTab(paneId);
+      }
+    } else if (pane.activeTabId === tabId) {
+      const nextIdx = Math.min(index, pane.tabs.length - 1);
+      pane.activeTabId = pane.tabs[nextIdx].id;
     }
   }
 
   async function handleConfirmSaveAndClose() {
-    const targetId = pendingCloseTabId;
-    if (!targetId || !rootPane) return;
+    const target = pendingClose;
+    if (!target) return;
 
-    if (rootPane.activeTabId !== targetId) {
-      rootPane.activeTabId = targetId;
-    }
-
-    if (activeFileTabRef) {
-      const ok = await activeFileTabRef.save();
+    const fileRef = fileTabRefs[target.tabId];
+    if (fileRef) {
+      const ok = await fileRef.save();
       if (!ok) {
-        pendingCloseTabId = null;
+        pendingClose = null;
         return;
       }
     }
-    pendingCloseTabId = null;
-    forceCloseTab(targetId);
+    pendingClose = null;
+    forceCloseTab(target.paneId, target.tabId);
   }
 
   function handleDiscardAndClose() {
-    const targetId = pendingCloseTabId;
-    pendingCloseTabId = null;
-    if (targetId) {
-      forceCloseTab(targetId);
+    const target = pendingClose;
+    pendingClose = null;
+    if (target) {
+      forceCloseTab(target.paneId, target.tabId);
     }
   }
 </script>
@@ -383,15 +602,52 @@
     <header class="workspace-bar">
       <div class="workspace-list">
         {#each session.workspaces as ws (ws.id)}
-          <button
-            class="workspace-item"
-            class:active={ws.id === session.activeWorkspaceId}
-            onclick={() => (session.activeWorkspaceId = ws.id)}
-          >
-            {ws.name}
-          </button>
+          <div class="ws-pill" class:active={ws.id === session.activeWorkspaceId}>
+            {#if renamingWsId === ws.id}
+              <input
+                bind:value={renameInputText}
+                type="text"
+                class="ws-rename-input"
+                onblur={() => commitWorkspaceRename(ws.id)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') commitWorkspaceRename(ws.id);
+                  if (e.key === 'Escape') renamingWsId = null;
+                }}
+              />
+            {:else}
+              <button
+                class="workspace-item"
+                class:active={ws.id === session.activeWorkspaceId}
+                onclick={() => (session.activeWorkspaceId = ws.id)}
+                ondblclick={() => {
+                  renamingWsId = ws.id;
+                  renameInputText = ws.name;
+                }}
+              >
+                {ws.name}
+              </button>
+            {/if}
+            {#if session.workspaces.length > 1}
+              <button
+                class="ws-close-btn"
+                title="Hapus workspace"
+                aria-label="Hapus workspace"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  handleCloseWorkspace(ws.id);
+                }}
+              >
+                <X size={11} strokeWidth={2} />
+              </button>
+            {/if}
+          </div>
         {/each}
-        <button class="icon-btn" title="Workspace baru" aria-label="Workspace baru">
+        <button
+          class="icon-btn"
+          title="Workspace baru"
+          aria-label="Workspace baru"
+          onclick={handleAddWorkspace}
+        >
           <Plus size={14} strokeWidth={2} />
         </button>
       </div>
@@ -420,6 +676,13 @@
       </div>
     </header>
 
+    {#if sessionNotice}
+      <div class="session-notice-bar">
+        <span>{sessionNotice}</span>
+        <button class="small-btn" onclick={() => (sessionNotice = null)}>Tutup</button>
+      </div>
+    {/if}
+
     <div class="workbench">
       {#if session.sidebar.visible && session.sidebar.panel === 'git'}
         <div class="sidebar-shell" style:width="{session.sidebar.width}px">
@@ -431,115 +694,65 @@
         </div>
       {/if}
 
-      <section class="pane focused">
-        {#if rootPane}
-          <div class="tab-strip">
-            {#each rootPane.tabs as tab (tab.id)}
-              <div class="tab-wrapper" class:active={tab.id === rootPane.activeTabId}>
-                <button
-                  class="tab-item"
-                  class:active={tab.id === rootPane.activeTabId}
-                  onclick={() => (rootPane.activeTabId = tab.id)}
-                >
-                  {#if tab.kind === 'file'}
-                    <FileText size={14} strokeWidth={2} />
-                  {:else if tab.kind === 'diff'}
-                    <GitCompare size={14} strokeWidth={2} />
-                  {:else}
-                    <Terminal size={14} strokeWidth={2} />
-                  {/if}
-                  <span>{tab.title}</span>
-                  {#if dirtyTabs[tab.id]}
-                    <span class="dirty-dot" aria-label="Belum disimpan"></span>
-                  {/if}
-                </button>
-                <button
-                  class="tab-close-btn"
-                  title="Tutup tab (Alt+W)"
-                  aria-label="Tutup tab"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    requestCloseTab(tab.id);
-                  }}
-                >
-                  <X size={12} strokeWidth={2} />
-                </button>
-              </div>
-            {/each}
-
-            <div class="new-tab-dropdown">
-              <button
-                class="icon-btn"
-                title="Tab baru"
-                aria-label="Tab baru"
-                onclick={() => (newTabMenuOpen = !newTabMenuOpen)}
-              >
-                <Plus size={14} strokeWidth={2} />
-              </button>
-              {#if newTabMenuOpen}
-                <div class="dropdown-menu">
-                  <button
-                    class="dropdown-item"
-                    onclick={() => {
-                      newTabMenuOpen = false;
-                      quickOpenVisible = true;
-                    }}
-                  >
-                    <FileText size={14} strokeWidth={2} />
-                    <span>Buka file...</span>
-                  </button>
-                  <button class="dropdown-item" onclick={addTerminalTab}>
-                    <Terminal size={14} strokeWidth={2} />
-                    <span>Terminal baru</span>
-                  </button>
-                </div>
-              {/if}
-            </div>
+      <div class="workspaces-stage">
+        {#each session.workspaces as ws (ws.id)}
+          {@const isWsActive = ws.id === session.activeWorkspaceId}
+          {@const wsFocusedPane = focusedPaneByWs[ws.id] ?? getFirstPaneId(ws.root)}
+          {@const wsMaxPaneId = maximizedPaneByWs[ws.id] ?? null}
+          {@const renderNode = wsMaxPaneId
+            ? (findPaneById(ws.root, wsMaxPaneId) ?? ws.root)
+            : ws.root}
+          <div class="workspace-canvas" class:hidden-ws={!isWsActive}>
+            <PaneNode
+              node={renderNode}
+              focusedPaneId={wsFocusedPane}
+              maximizedPaneId={wsMaxPaneId}
+              workspaceVisible={isWsActive}
+              {dirtyTabs}
+              onFocusPane={(paneId) => {
+                focusedPaneByWs[ws.id] = paneId;
+              }}
+              onSelectTab={(paneId, tabId) => {
+                const target = findPaneById(ws.root, paneId);
+                if (target) target.activeTabId = tabId;
+              }}
+              onCloseTab={(paneId, tabId) => requestCloseTab(paneId, tabId)}
+              onAddTerminalTab={(paneId) => addTerminalTab(paneId)}
+              onRequestQuickOpen={(paneId) => {
+                focusedPaneByWs[ws.id] = paneId;
+                quickOpenVisible = true;
+              }}
+              onSplitPane={(paneId, dir) => handleSplitPane(paneId, dir)}
+              onToggleMaximizePane={(paneId) => handleToggleMaximizePane(paneId)}
+              onUpdateRatio={(path, nextRatio) => {
+                ws.root = updateSplitRatioByPath(ws.root, path, nextRatio);
+              }}
+              onMoveTab={(fromPaneId, tabId, toPaneId, idx) => {
+                ws.root = moveTabBetweenPanes(ws.root, fromPaneId, tabId, toPaneId, idx);
+                focusedPaneByWs[ws.id] = toPaneId;
+              }}
+              onTabDirtyChange={(tabId, dirty) => {
+                dirtyTabs[tabId] = dirty;
+                if (!dirty) {
+                  void refreshRepoStatus();
+                }
+              }}
+              onTabMetaChange={(tabId, meta) => {
+                tabMetaMap[tabId] = meta;
+              }}
+              onOpenFileFromDiff={(relPath, line) => {
+                if (projectState.activeFolder) {
+                  openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
+                }
+              }}
+              onRepoChanged={() => void refreshRepoStatus()}
+              onRegisterFileTabRef={(tabId, ref) => {
+                fileTabRefs[tabId] = ref;
+              }}
+            />
           </div>
-
-          <div class="pane-body no-pad">
-            {#each rootPane.tabs.filter((t) => t.kind === 'terminal') as termTab (termTab.id)}
-              <TerminalTab sessionId={termTab.id} visible={activeTab?.id === termTab.id} />
-            {/each}
-
-            {#if activeTab}
-              {#if activeTab.kind === 'file' && typeof activeTab.data.path === 'string'}
-                {#key activeTab.id}
-                  <FileTab
-                    bind:this={activeFileTabRef}
-                    path={activeTab.data.path}
-                    targetLine={typeof activeTab.data.line === 'number'
-                      ? activeTab.data.line
-                      : null}
-                    onDirtyChange={(dirty) => {
-                      dirtyTabs[activeTab.id] = dirty;
-                      if (!dirty) {
-                        void refreshRepoStatus();
-                      }
-                    }}
-                    onMetaChange={(meta) => {
-                      tabMetaMap[activeTab.id] = meta;
-                    }}
-                  />
-                {/key}
-              {:else if activeTab.kind === 'diff' && typeof activeTab.data.relPath === 'string'}
-                {#key activeTab.id}
-                  <DiffTab
-                    relPath={activeTab.data.relPath}
-                    initialStaged={Boolean(activeTab.data.staged)}
-                    onOpenFile={(relPath, line) => {
-                      if (projectState.activeFolder) {
-                        openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
-                      }
-                    }}
-                    onChanged={() => void refreshRepoStatus()}
-                  />
-                {/key}
-              {/if}
-            {/if}
-          </div>
-        {/if}
-      </section>
+        {/each}
+      </div>
     </div>
 
     <footer class="status-bar">
@@ -577,7 +790,7 @@
       onSelect={(fullPath, line) => openFileInPane(fullPath, line)}
     />
 
-    {#if pendingCloseTabId}
+    {#if pendingClose}
       <div class="modal-backdrop">
         <div class="confirm-dialog" role="dialog" aria-modal="true" aria-label="Konfirmasi simpan">
           <h2 class="confirm-title">Simpan perubahan sebelum menutup?</h2>
@@ -585,7 +798,7 @@
           <div class="confirm-actions">
             <button class="primary" onclick={handleConfirmSaveAndClose}>Simpan</button>
             <button class="danger" onclick={handleDiscardAndClose}>Buang</button>
-            <button onclick={() => (pendingCloseTabId = null)}>Batal</button>
+            <button onclick={() => (pendingClose = null)}>Batal</button>
           </div>
         </div>
       </div>
@@ -699,20 +912,51 @@
   .workspace-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .ws-pill {
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius-ctrl);
+  }
+
+  .ws-pill.active {
+    background: var(--acs);
   }
 
   .workspace-item {
     height: 26px;
-    padding: 4px 12px;
+    padding: 4px 10px;
     border: none;
-    border-radius: var(--radius-ctrl);
+    background: transparent;
     color: var(--dm);
   }
 
   .workspace-item.active {
-    background: var(--acs);
     color: var(--ac);
+  }
+
+  .ws-rename-input {
+    width: 96px;
+    height: 24px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+
+  .ws-close-btn {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin-right: 4px;
+    border: none;
+    background: transparent;
+    color: var(--dm);
+    opacity: 0;
+  }
+
+  .ws-pill:hover .ws-close-btn {
+    opacity: 1;
   }
 
   .folder-switch {
@@ -735,6 +979,24 @@
     color: var(--dm);
   }
 
+  .session-notice-bar {
+    height: 30px;
+    padding: 0 16px;
+    background: var(--el);
+    border-bottom: 1px solid var(--bd);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--mo);
+  }
+
+  .small-btn {
+    height: 22px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
   .workbench {
     flex: 1;
     display: flex;
@@ -748,120 +1010,24 @@
     min-height: 0;
   }
 
-  .pane {
+  .workspaces-stage {
     flex: 1;
     display: flex;
-    flex-direction: column;
-    min-width: 200px;
-    min-height: 200px;
-    background: var(--bg);
-  }
-
-  .pane.focused {
-    border-top: 2px solid var(--ac);
-  }
-
-  .tab-strip {
-    height: 36px;
-    padding: 0 12px;
-    background: var(--pn);
-    border-bottom: 1px solid var(--bd);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .tab-wrapper {
-    display: flex;
-    align-items: center;
-    border-radius: var(--radius-ctrl);
-    padding-right: 4px;
-  }
-
-  .tab-wrapper.active {
-    background: var(--el);
-  }
-
-  .tab-item {
-    height: 26px;
-    padding: 0 8px 0 10px;
-    border: none;
-    background: transparent;
-    color: var(--dm);
-    gap: 8px;
-  }
-
-  .tab-item.active {
-    color: var(--tx);
-  }
-
-  .dirty-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ac);
-  }
-
-  .tab-close-btn {
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--dm);
-    opacity: 0;
-  }
-
-  .tab-wrapper:hover .tab-close-btn,
-  .tab-wrapper.active .tab-close-btn {
-    opacity: 1;
-  }
-
-  .new-tab-dropdown {
-    position: relative;
-  }
-
-  .dropdown-menu {
-    position: absolute;
-    top: 30px;
-    left: 0;
-    min-width: 160px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-dialog);
-    padding: 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    z-index: 30;
-  }
-
-  .dropdown-item {
-    width: 100%;
-    height: 28px;
-    padding: 0 10px;
-    border: none;
-    background: transparent;
-    color: var(--tx);
-    justify-content: flex-start;
-    gap: 8px;
-  }
-
-  .dropdown-item:hover {
-    background: var(--acs);
-  }
-
-  .pane-body {
-    flex: 1;
-    padding: 16px 24px;
-    overflow: auto;
+    min-width: 0;
     min-height: 0;
   }
 
-  .pane-body.no-pad {
-    padding: 0;
-    overflow: hidden;
+  .workspace-canvas {
+    flex: 1;
     display: flex;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .workspace-canvas.hidden-ws {
+    display: none;
   }
 
   .mono {
