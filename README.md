@@ -13,13 +13,13 @@ Terminal-first workspace yang ringan untuk Linux: terminal, editor file, git pan
 
 ## Ukuran dan Penggunaan RAM
 
-_(Akan diisi setelah pengukuran build release menggunakan `smem -P glzr`)_
-
-| Metrik                    | Target     | Hasil Pengukuran |
-| ------------------------- | ---------- | ---------------- |
-| Ukuran Installer          | 12-25 MB   | TBD              |
-| RAM Baseline (1 terminal) | 80-150 MB  | TBD              |
-| Sesi Harian Wajar         | 150-250 MB | TBD              |
+| Metrik                        | Target     | Hasil Pengukuran Awal (Baseline) |
+| ----------------------------- | ---------- | -------------------------------- |
+| Binary Utama (`glzr` release) | -          | 3.4 MB                           |
+| Bundle Frontend (JS/HTML)     | < 300 KB   | ~80 KB                           |
+| Total Payload (+ `rg` & font) | 12-25 MB   | ~11.7 MB (uncompressed)          |
+| RAM Baseline (1 terminal)     | 80-150 MB  | Diukur saat UI penuh (Tahap 11)  |
+| Sesi Harian Wajar             | 150-250 MB | Diukur saat UI penuh (Tahap 11)  |
 
 ## Keybind Ringkas
 
