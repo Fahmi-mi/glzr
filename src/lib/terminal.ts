@@ -1,3 +1,5 @@
+import { normalizePreviewUrl } from './preview';
+
 export interface TerminalKeyInput {
   key: string;
   ctrlKey: boolean;
@@ -23,4 +25,18 @@ export function resolveTerminalKey(input: TerminalKeyInput): TerminalKeyDisposit
   }
 
   return 'pass-to-pty';
+}
+
+export function isLargePaste(text: string, confirmOverKb = 64): boolean {
+  const byteLength = new TextEncoder().encode(text).byteLength;
+  return byteLength > confirmOverKb * 1024;
+}
+
+export function clampTerminalFontSize(size: number, min = 10, max = 28): number {
+  if (!Number.isFinite(size)) return 14;
+  return Math.max(min, Math.min(max, Math.round(size)));
+}
+
+export function extractLocalhostUrl(rawUrl: string): string | null {
+  return normalizePreviewUrl(rawUrl);
 }

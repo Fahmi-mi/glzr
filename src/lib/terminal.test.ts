@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { resolveTerminalKey } from './terminal';
+import {
+  clampTerminalFontSize,
+  extractLocalhostUrl,
+  isLargePaste,
+  resolveTerminalKey
+} from './terminal';
 
 describe('terminal key handling spike', () => {
   it('copies on Ctrl+C only when text is selected and passes SIGINT otherwise', () => {
@@ -61,5 +66,17 @@ describe('terminal key handling spike', () => {
         hasSelection: false
       })
     ).toBe('paste');
+  });
+
+  it('checks large paste threshold, font zoom bounds, and localhost links', () => {
+    expect(isLargePaste('short text', 1)).toBe(false);
+    expect(isLargePaste('x'.repeat(2048), 1)).toBe(true);
+
+    expect(clampTerminalFontSize(14)).toBe(14);
+    expect(clampTerminalFontSize(6)).toBe(10);
+    expect(clampTerminalFontSize(40)).toBe(28);
+
+    expect(extractLocalhostUrl('http://localhost:5173/')).toBe('http://localhost:5173/');
+    expect(extractLocalhostUrl('https://example.com')).toBeNull();
   });
 });

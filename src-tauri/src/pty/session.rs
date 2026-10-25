@@ -59,6 +59,9 @@ impl PtySession {
         cmd.env("TERM_PROGRAM", "glzr");
         cmd.env_remove("WEBKIT_DISABLE_DMABUF_RENDERER");
         cmd.env_remove("WEBKIT_DISABLE_COMPOSITING_MODE");
+        cmd.env_remove("APPIMAGE");
+        cmd.env_remove("APPDIR");
+        cmd.env_remove("OWD");
 
         let child = pair
             .slave
@@ -113,6 +116,12 @@ impl PtySession {
             })
             .map_err(|e| PtyError::Pty(e.to_string()))?;
         Ok(())
+    }
+
+    pub fn wait_exit_code(&self) -> Option<i32> {
+        let mut child = self.child.lock().ok()?;
+        let status = child.wait().ok()?;
+        Some(status.exit_code() as i32)
     }
 
     pub fn kill(&self) -> Result<(), PtyError> {

@@ -24,6 +24,7 @@
   import GitPanel from '$lib/components/sidebar/GitPanel.svelte';
   import DiffTab from '$lib/components/tabs/DiffTab.svelte';
   import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
+  import TerminalTab from '$lib/components/tabs/TerminalTab.svelte';
 
   let projectState = $state<ProjectStateDto>({
     activeFolder: null,
@@ -106,10 +107,15 @@
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (!projectState.activeFolder) return;
 
+    const terminalFocused = activeTab?.kind === 'terminal';
+
     const isAltO =
       event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'o';
     const isCtrlP =
-      (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'p';
+      !terminalFocused &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      event.key.toLowerCase() === 'p';
 
     if (isAltO || isCtrlP) {
       event.preventDefault();
@@ -126,13 +132,35 @@
       return;
     }
 
+    const isAltT =
+      event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 't';
+    if (isAltT) {
+      event.preventDefault();
+      addTerminalTab();
+      return;
+    }
+
     const isCtrlW =
-      (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'w';
+      !terminalFocused &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      event.key.toLowerCase() === 'w';
     const isAltW =
       event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'w';
     if ((isCtrlW || isAltW) && activeTab) {
       event.preventDefault();
       requestCloseTab(activeTab.id);
+      return;
+    }
+
+    if (event.altKey && !event.ctrlKey && !event.metaKey && rootPane && rootPane.tabs.length > 1) {
+      if (event.key === 'PageDown' || event.key === 'PageUp') {
+        event.preventDefault();
+        const curIdx = rootPane.tabs.findIndex((t) => t.id === rootPane.activeTabId);
+        const delta = event.key === 'PageDown' ? 1 : -1;
+        const nextIdx = (curIdx + delta + rootPane.tabs.length) % rootPane.tabs.length;
+        rootPane.activeTabId = rootPane.tabs[nextIdx].id;
+      }
     }
   }
 
@@ -469,10 +497,11 @@
             </div>
           </div>
 
-          <div
-            class="pane-body"
-            class:no-pad={activeTab?.kind === 'file' || activeTab?.kind === 'diff'}
-          >
+          <div class="pane-body no-pad">
+            {#each rootPane.tabs.filter((t) => t.kind === 'terminal') as termTab (termTab.id)}
+              <TerminalTab sessionId={termTab.id} visible={activeTab?.id === termTab.id} />
+            {/each}
+
             {#if activeTab}
               {#if activeTab.kind === 'file' && typeof activeTab.data.path === 'string'}
                 {#key activeTab.id}
@@ -506,10 +535,6 @@
                     onChanged={() => void refreshRepoStatus()}
                   />
                 {/key}
-              {:else}
-                <div class="terminal-placeholder">
-                  <span class="mono">{projectState.activeFolder} $</span>
-                </div>
               {/if}
             {/if}
           </div>
@@ -837,13 +862,6 @@
     padding: 0;
     overflow: hidden;
     display: flex;
-  }
-
-  .terminal-placeholder {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-code);
-    line-height: 1.8;
-    color: var(--dm);
   }
 
   .mono {
