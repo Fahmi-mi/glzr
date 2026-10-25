@@ -117,6 +117,11 @@ export interface PtySpawnDto {
   rows: number;
 }
 
+export interface SessionLoadDto {
+  rawJson: string | null;
+  backedUpCorrupt: boolean;
+}
+
 export interface BackendEventMap {
   'pty:output': { sessionId: string; data: string };
   'pty:exit': { sessionId: string; code: number | null };
@@ -325,6 +330,14 @@ export async function ptyResize(sessionId: string, cols: number, rows: number): 
 
 export async function ptyKill(sessionId: string): Promise<void> {
   return callCommand<void>('pty_kill', { sessionId });
+}
+
+export async function sessionLoad(): Promise<SessionLoadDto> {
+  return callCommand<SessionLoadDto>('session_load');
+}
+
+export async function sessionSave(rawJson: string): Promise<void> {
+  return callCommand<void>('session_save', { rawJson });
 }
 
 export async function revealInFileManager(path: string): Promise<void> {

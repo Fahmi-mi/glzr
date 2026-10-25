@@ -10,7 +10,7 @@ use crate::fs::{DirEntryDto, DraftDto, FileReadDto, WriteResultDto, DEFAULT_IGNO
 use crate::git::hunk::DiffHunk;
 use crate::git::{GitBranchesDto, GitDiffDto, GitStatusDto};
 use crate::pty::{PtyExitEvent, PtyOutputEvent, PtySpawnDto};
-use crate::state::{AppState, ProjectStateDto, XdgPaths};
+use crate::state::{AppState, ProjectStateDto, SessionLoadDto, XdgPaths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
@@ -282,6 +282,16 @@ fn pty_kill(session_id: String, state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command]
+fn session_load(state: State<'_, AppState>) -> AppResult<SessionLoadDto> {
+    state.load_session()
+}
+
+#[tauri::command]
+fn session_save(raw_json: String, state: State<'_, AppState>) -> AppResult<()> {
+    state.save_session(&raw_json)
+}
+
+#[tauri::command]
 fn reveal_in_file_manager(path: String) -> AppResult<()> {
     let target = Path::new(&path);
     if !target.exists() {
@@ -435,6 +445,8 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            session_load,
+            session_save,
             reveal_in_file_manager,
             open_external
         ]);

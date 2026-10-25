@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 const APP_DIR_NAME: &str = "glzr";
 const DEFAULT_RECENT_LIMIT: usize = 5;
+pub const CURRENT_SESSION_VERSION: u64 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +18,13 @@ pub struct ProjectStateDto {
     pub active_folder: Option<String>,
     pub folder_name: Option<String>,
     pub recent_folders: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionLoadDto {
+    pub raw_json: Option<String>,
+    pub backed_up_corrupt: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -78,6 +86,14 @@ impl XdgPaths {
     pub fn recent_file_path(&self) -> PathBuf {
         self.data_dir.join("recent.json")
     }
+
+    pub fn session_file_path(&self) -> PathBuf {
+        self.data_dir.join("session.json")
+    }
+
+    pub fn session_backup_path(&self) -> PathBuf {
+        self.data_dir.join("session.json.bak")
+    }
 }
 
 #[derive(Debug, Default)]
@@ -102,6 +118,10 @@ impl AppState {
                 let canonical_str = canonical.to_string_lossy().into_owned();
                 push_recent_folder(&mut recent_folders, &canonical_str, DEFAULT_RECENT_LIMIT);
                 let _ = save_recent_folders(&xdg.recent_file_path(), &recent_folders);
+                active_folder = Some(canonical);
+            }
+        } else if let Some(saved_folder) = peek_session_folder(&xdg.session_file_path()) {
+            if let Ok(canonical) = validate_project_dir(&saved_folder) {
                 active_folder = Some(canonical);
             }
         }
@@ -166,6 +186,79 @@ impl AppState {
             }
         }
     }
+
+    pub fn load_session(&self) -> AppResult<SessionLoadDto> {
+        let session_path = self.xdg.session_file_path();
+        if !session_path.exists() {
+            return Ok(SessionLoadDto {
+                raw_json: None,
+                backed_up_corrupt: false,
+            });
+        }
+
+        let raw = match fs::read_to_string(&session_path) {
+            Ok(s) => s,
+            Err(_) => {
+                let _ = fs::copy(&session_path, self.xdg.session_backup_path());
+                return Ok(SessionLoadDto {
+                    raw_json: None,
+                    backed_up_corrupt: true,
+                });
+            }
+        };
+
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => {
+                let _ = fs::copy(&session_path, self.xdg.session_backup_path());
+                return Ok(SessionLoadDto {
+                    raw_json: None,
+                    backed_up_corrupt: true,
+                });
+            }
+        };
+
+        let version = parsed.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+        if version == 0 || version > CURRENT_SESSION_VERSION {
+            let _ = fs::copy(&session_path, self.xdg.session_backup_path());
+            return Ok(SessionLoadDto {
+                raw_json: None,
+                backed_up_corrupt: true,
+            });
+        }
+
+        Ok(SessionLoadDto {
+            raw_json: Some(raw),
+            backed_up_corrupt: false,
+        })
+    }
+
+    pub fn save_session(&self, raw_json: &str) -> AppResult<()> {
+        let parsed: serde_json::Value = serde_json::from_str(raw_json)?;
+        let version = parsed.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+        if version == 0 || version > CURRENT_SESSION_VERSION {
+            return Err(AppError::Validation(format!(
+                "unsupported session version: {}",
+                version
+            )));
+        }
+        let formatted = serde_json::to_vec_pretty(&parsed)?;
+        atomic_write_bytes(&self.xdg.session_file_path(), &formatted)
+    }
+}
+
+fn peek_session_folder(session_path: &Path) -> Option<PathBuf> {
+    let raw = fs::read_to_string(session_path).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let version = parsed.get("version")?.as_u64()?;
+    if version == 0 || version > CURRENT_SESSION_VERSION {
+        return None;
+    }
+    let folder = parsed.get("folder")?.as_str()?.trim();
+    if folder.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(folder))
 }
 
 fn build_project_dto(data: &WorkspaceData) -> ProjectStateDto {
@@ -314,6 +407,51 @@ mod tests {
 
         let reloaded = AppState::new(xdg, None);
         assert_eq!(reloaded.get_project_state()?.recent_folders.len(), 5);
+        Ok(())
+    }
+
+    #[test]
+    fn session_save_and_load_backs_up_incompatible_or_corrupt_files() -> AppResult<()> {
+        let tmp = TempDir::new()?;
+        let xdg = XdgPaths::from_base_env(
+            tmp.path(),
+            Some(tmp.path().join("config")),
+            Some(tmp.path().join("data")),
+            Some(tmp.path().join("cache")),
+            Some(tmp.path().join("state")),
+        );
+
+        let proj = tmp.path().join("my-proj");
+        fs::create_dir_all(&proj)?;
+        let proj_str = proj.canonicalize()?.to_string_lossy().into_owned();
+
+        let state = AppState::new(xdg.clone(), None);
+        let initial = state.load_session()?;
+        assert!(initial.raw_json.is_none());
+        assert!(!initial.backed_up_corrupt);
+
+        let valid_json = format!(
+            r#"{{"version":1,"folder":"{}","activeWorkspaceId":"ws-1","workspaces":[]}}"#,
+            proj_str
+        );
+        state.save_session(&valid_json)?;
+
+        let loaded = state.load_session()?;
+        assert!(loaded.raw_json.is_some());
+        assert!(!loaded.backed_up_corrupt);
+
+        let restored_state = AppState::new(xdg.clone(), None);
+        assert_eq!(
+            restored_state.get_project_state()?.active_folder.as_deref(),
+            Some(proj_str.as_str())
+        );
+
+        fs::write(xdg.session_file_path(), r#"{"version":99}"#)?;
+        let future_ver = state.load_session()?;
+        assert!(future_ver.raw_json.is_none());
+        assert!(future_ver.backed_up_corrupt);
+        assert!(xdg.session_backup_path().exists());
+
         Ok(())
     }
 }
