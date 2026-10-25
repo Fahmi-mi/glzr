@@ -9,6 +9,8 @@ import {
 describe('language detection and quick open fuzzy matcher', () => {
   it('detects languages from special filenames, extensions, and shebangs', () => {
     expect(detectLanguage('src/main.rs').id).toBe('rust');
+    expect(detectLanguage('cmd/server/main.go').id).toBe('go');
+    expect(detectLanguage('go.mod').id).toBe('go');
     expect(detectLanguage('src/routes/+page.svelte').id).toBe('svelte');
     expect(detectLanguage('Dockerfile').id).toBe('dockerfile');
     expect(detectLanguage('Cargo.lock').id).toBe('toml');
@@ -22,6 +24,9 @@ describe('language detection and quick open fuzzy matcher', () => {
   it('dynamically loads codemirror language extensions', async () => {
     const rustExt = await loadLanguageExtension('rust');
     expect(rustExt).not.toBeNull();
+
+    const goExt = await loadLanguageExtension('go');
+    expect(goExt).not.toBeNull();
 
     const tomlExt = await loadLanguageExtension('toml');
     expect(tomlExt).not.toBeNull();

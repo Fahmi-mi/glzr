@@ -10,6 +10,7 @@ export type LanguageId =
   | 'css'
   | 'markdown'
   | 'rust'
+  | 'go'
   | 'python'
   | 'yaml'
   | 'toml'
@@ -33,6 +34,13 @@ export const LANGUAGE_TABLE: readonly LanguageEntry[] = [
     extensions: ['rs'],
     filenames: [],
     shebangs: []
+  },
+  {
+    id: 'go',
+    label: 'Go',
+    extensions: ['go'],
+    filenames: ['go.mod', 'go.sum', 'go.work'],
+    shebangs: ['go']
   },
   {
     id: 'typescript',
@@ -237,6 +245,13 @@ export async function loadLanguageExtension(langId: LanguageId): Promise<Extensi
     case 'rust': {
       const mod = await import('@codemirror/lang-rust');
       return mod.rust();
+    }
+    case 'go': {
+      const [{ StreamLanguage }, { go }] = await Promise.all([
+        import('@codemirror/language'),
+        import('@codemirror/legacy-modes/mode/go')
+      ]);
+      return StreamLanguage.define(go);
     }
     case 'python': {
       const mod = await import('@codemirror/lang-python');
