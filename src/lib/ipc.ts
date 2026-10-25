@@ -54,6 +54,61 @@ export interface DraftDto {
   savedAtMs: number;
 }
 
+export type GitBadge = 'M' | 'A' | 'D' | 'R' | '?' | '!';
+
+export interface GitFileEntry {
+  path: string;
+  origPath: string | null;
+  badge: GitBadge;
+  staged: boolean;
+}
+
+export interface GitStatusDto {
+  gitAvailable: boolean;
+  isRepo: boolean;
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  detached: boolean;
+  merging: boolean;
+  rebasing: boolean;
+  hasConflicts: boolean;
+  staged: GitFileEntry[];
+  unstaged: GitFileEntry[];
+  untracked: GitFileEntry[];
+  conflicted: GitFileEntry[];
+}
+
+export interface DiffHunkDto {
+  index: number;
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  content: string;
+}
+
+export interface FileDiffDto {
+  fileHeader: string;
+  hunks: DiffHunkDto[];
+}
+
+export interface GitDiffDto {
+  path: string;
+  staged: boolean;
+  isBinary: boolean;
+  tooLarge: boolean;
+  rawDiff: string;
+  fileDiff: FileDiffDto | null;
+}
+
+export interface GitBranchesDto {
+  current: string | null;
+  branches: string[];
+}
+
 export interface BackendEventMap {
   'pty:output': { sessionId: string; data: string };
   'pty:exit': { sessionId: string; code: number | null };
@@ -182,6 +237,62 @@ export async function fsLoadDraft(path: string): Promise<DraftDto | null> {
 
 export async function fsClearDraft(path: string): Promise<void> {
   return callCommand<void>('fs_clear_draft', { path });
+}
+
+export async function gitStatus(): Promise<GitStatusDto> {
+  return callCommand<GitStatusDto>('git_status');
+}
+
+export async function gitDiff(path: string, staged: boolean): Promise<GitDiffDto> {
+  return callCommand<GitDiffDto>('git_diff', { path, staged });
+}
+
+export async function gitHunks(path: string, staged: boolean): Promise<DiffHunkDto[]> {
+  return callCommand<DiffHunkDto[]>('git_hunks', { path, staged });
+}
+
+export async function gitStage(path: string): Promise<void> {
+  return callCommand<void>('git_stage', { path });
+}
+
+export async function gitUnstage(path: string): Promise<void> {
+  return callCommand<void>('git_unstage', { path });
+}
+
+export async function gitDiscard(path: string): Promise<void> {
+  return callCommand<void>('git_discard', { path });
+}
+
+export async function gitStageHunk(path: string, hunkIndex: number): Promise<void> {
+  return callCommand<void>('git_stage_hunk', { path, hunkIndex });
+}
+
+export async function gitUnstageHunk(path: string, hunkIndex: number): Promise<void> {
+  return callCommand<void>('git_unstage_hunk', { path, hunkIndex });
+}
+
+export async function gitDiscardHunk(path: string, hunkIndex: number): Promise<void> {
+  return callCommand<void>('git_discard_hunk', { path, hunkIndex });
+}
+
+export async function gitCommit(message: string): Promise<void> {
+  return callCommand<void>('git_commit', { message });
+}
+
+export async function gitBranches(): Promise<GitBranchesDto> {
+  return callCommand<GitBranchesDto>('git_branches');
+}
+
+export async function gitCheckout(branch: string): Promise<void> {
+  return callCommand<void>('git_checkout', { branch });
+}
+
+export async function gitPull(): Promise<void> {
+  return callCommand<void>('git_pull');
+}
+
+export async function gitPush(): Promise<void> {
+  return callCommand<void>('git_push');
 }
 
 export async function revealInFileManager(path: string): Promise<void> {

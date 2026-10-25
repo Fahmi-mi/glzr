@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiffHunk {
     pub index: usize,
     pub header: String,
@@ -15,6 +16,7 @@ pub struct DiffHunk {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileDiff {
     pub file_header: String,
     pub hunks: Vec<DiffHunk>,
