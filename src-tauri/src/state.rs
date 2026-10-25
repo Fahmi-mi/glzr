@@ -121,6 +121,14 @@ impl AppState {
         Ok(build_project_dto(&guard))
     }
 
+    pub fn active_folder_path(&self) -> AppResult<PathBuf> {
+        let guard = self.workspace.lock().map_err(|_| AppError::LockPoisoned)?;
+        guard
+            .active_folder
+            .clone()
+            .ok_or_else(|| AppError::Validation("no active project folder".into()))
+    }
+
     pub fn open_folder(&self, raw_path: &Path) -> AppResult<ProjectStateDto> {
         let canonical = validate_project_dir(raw_path)?;
         let canonical_str = canonical.to_string_lossy().into_owned();
