@@ -7,6 +7,8 @@ pub mod state;
 use crate::error::{AppError, AppResult};
 use crate::fs::detect::{EncodingKind, LineEnding};
 use crate::fs::{DirEntryDto, DraftDto, FileReadDto, WriteResultDto, DEFAULT_IGNORE_NAMES};
+use crate::git::hunk::DiffHunk;
+use crate::git::{GitBranchesDto, GitDiffDto, GitStatusDto};
 use crate::state::{AppState, ProjectStateDto, XdgPaths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -113,6 +115,90 @@ fn fs_load_draft(path: String, state: State<'_, AppState>) -> AppResult<Option<D
 fn fs_clear_draft(path: String, state: State<'_, AppState>) -> AppResult<()> {
     let root = state.active_folder_path()?;
     fs::clear_draft(&root, &state.xdg.cache_dir, Path::new(&path))
+}
+
+#[tauri::command]
+fn git_status(state: State<'_, AppState>) -> AppResult<GitStatusDto> {
+    let root = state.active_folder_path()?;
+    git::status(&root)
+}
+
+#[tauri::command]
+fn git_diff(path: String, staged: bool, state: State<'_, AppState>) -> AppResult<GitDiffDto> {
+    let root = state.active_folder_path()?;
+    git::diff(&root, &path, staged)
+}
+
+#[tauri::command]
+fn git_hunks(path: String, staged: bool, state: State<'_, AppState>) -> AppResult<Vec<DiffHunk>> {
+    let root = state.active_folder_path()?;
+    git::hunks(&root, &path, staged)
+}
+
+#[tauri::command]
+fn git_stage(path: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::stage_file(&root, &path)
+}
+
+#[tauri::command]
+fn git_unstage(path: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::unstage_file(&root, &path)
+}
+
+#[tauri::command]
+fn git_discard(path: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::discard_file(&root, &state.xdg.cache_dir, &path)
+}
+
+#[tauri::command]
+fn git_stage_hunk(path: String, hunk_index: usize, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::stage_hunk(&root, &path, hunk_index)
+}
+
+#[tauri::command]
+fn git_unstage_hunk(path: String, hunk_index: usize, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::unstage_hunk(&root, &path, hunk_index)
+}
+
+#[tauri::command]
+fn git_discard_hunk(path: String, hunk_index: usize, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::discard_hunk(&root, &state.xdg.cache_dir, &path, hunk_index)
+}
+
+#[tauri::command]
+fn git_commit(message: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::commit(&root, &message)
+}
+
+#[tauri::command]
+fn git_branches(state: State<'_, AppState>) -> AppResult<GitBranchesDto> {
+    let root = state.active_folder_path()?;
+    git::branches(&root)
+}
+
+#[tauri::command]
+fn git_checkout(branch: String, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::checkout(&root, &branch)
+}
+
+#[tauri::command]
+fn git_pull(state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::pull(&root)
+}
+
+#[tauri::command]
+fn git_push(state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::push(&root)
 }
 
 #[tauri::command]
@@ -251,6 +337,20 @@ pub fn run() {
             fs_save_draft,
             fs_load_draft,
             fs_clear_draft,
+            git_status,
+            git_diff,
+            git_hunks,
+            git_stage,
+            git_unstage,
+            git_discard,
+            git_stage_hunk,
+            git_unstage_hunk,
+            git_discard_hunk,
+            git_commit,
+            git_branches,
+            git_checkout,
+            git_pull,
+            git_push,
             reveal_in_file_manager,
             open_external
         ]);
