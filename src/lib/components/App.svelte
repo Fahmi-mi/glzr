@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import Files from '@lucide/svelte/icons/files';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import Plus from '@lucide/svelte/icons/plus';
@@ -7,14 +8,18 @@
   import X from '@lucide/svelte/icons/x';
   import {
     fsClearDraft,
+    fsUnwatch,
+    fsWatch,
     gitStatus,
     normalizeTabPath,
+    onBackendEvent,
     pickProjectFolderDialog,
     projectGetState,
     projectOpenFolder,
     sessionLoad,
     sessionSave,
     type AppErrorPayload,
+    type GitBadge,
     type GitStatusDto,
     type ProjectStateDto
   } from '$lib/ipc';
@@ -23,6 +28,7 @@
     findDirectionalNeighborPane,
     findPaneById,
     getFirstPaneId,
+    listAllPanes,
     migrateAndSanitizeSession,
     moveTabBetweenPanes,
     splitPane,
@@ -37,7 +43,9 @@
   } from '$lib/layout/types';
   import PaneNode from '$lib/components/PaneNode.svelte';
   import QuickOpen from '$lib/components/QuickOpen.svelte';
+  import FileTree from '$lib/components/sidebar/FileTree.svelte';
   import GitPanel from '$lib/components/sidebar/GitPanel.svelte';
+  import SearchPanel from '$lib/components/sidebar/SearchPanel.svelte';
   import type { FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
   import type FileTab from '$lib/components/tabs/FileTab.svelte';
 
@@ -61,12 +69,33 @@
   let tabMetaMap = $state<Record<string, FileTabMeta>>({});
   let fileTabRefs = $state<Record<string, ReturnType<typeof FileTab> | null>>({});
   let pendingClose = $state<{ paneId: string; tabId: string } | null>(null);
+  let fileTreeRef = $state<ReturnType<typeof FileTree> | null>(null);
   let gitPanelRef = $state<ReturnType<typeof GitPanel> | null>(null);
+  let searchPanelRef = $state<ReturnType<typeof SearchPanel> | null>(null);
   let repoStatus = $state<GitStatusDto | null>(null);
 
   let idSeq = $state(100);
   let saveSessionTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionReady = $state(false);
+  let unlistenFsChanged: (() => void) | null = null;
+
+  const gitBadges = $derived.by<Record<string, GitBadge>>(() => {
+    const map: Record<string, GitBadge> = {};
+    if (!repoStatus?.isRepo) return map;
+    for (const item of repoStatus.untracked) {
+      map[normalizeTabPath(item.path)] = item.badge;
+    }
+    for (const item of repoStatus.unstaged) {
+      map[normalizeTabPath(item.path)] = item.badge;
+    }
+    for (const item of repoStatus.staged) {
+      map[normalizeTabPath(item.path)] = item.badge;
+    }
+    for (const item of repoStatus.conflicted) {
+      map[normalizeTabPath(item.path)] = item.badge;
+    }
+    return map;
+  });
 
   const activeWorkspace = $derived(
     session.workspaces.find((w) => w.id === session.activeWorkspaceId) ?? session.workspaces[0]
@@ -129,6 +158,11 @@
   }
 
   onMount(async () => {
+    unlistenFsChanged = await onBackendEvent('fs:changed', () => {
+      void fileTreeRef?.refresh();
+      void refreshRepoStatus();
+    });
+
     try {
       const [state, loadedSession] = await Promise.all([
         projectGetState(),
@@ -156,7 +190,7 @@
         } else {
           session = createInitialSession(state.activeFolder);
         }
-        await refreshRepoStatus();
+        await Promise.all([fsWatch().catch(() => {}), refreshRepoStatus()]);
       }
     } catch {
       projectState = {
@@ -171,6 +205,8 @@
   });
 
   onDestroy(() => {
+    unlistenFsChanged?.();
+    void fsUnwatch().catch(() => {});
     if (saveSessionTimer !== null) {
       clearTimeout(saveSessionTimer);
       saveSessionTimer = null;
@@ -182,14 +218,20 @@
     focusedPaneByWs[activeWorkspace.id] = paneId;
   }
 
-  function toggleGitSidebar() {
-    if (session.sidebar.visible && session.sidebar.panel === 'git') {
+  function toggleSidebarPanel(panel: 'files' | 'git' | 'search') {
+    if (session.sidebar.visible && session.sidebar.panel === panel) {
       session.sidebar.visible = false;
     } else {
       session.sidebar.visible = true;
-      session.sidebar.panel = 'git';
+      session.sidebar.panel = panel;
       queueMicrotask(() => {
-        gitPanelRef?.focusInput();
+        if (panel === 'files') {
+          fileTreeRef?.focusTree();
+        } else if (panel === 'git') {
+          gitPanelRef?.focusInput();
+        } else if (panel === 'search') {
+          searchPanelRef?.focusInput();
+        }
       });
     }
   }
@@ -273,9 +315,21 @@
       return;
     }
 
+    if (altOnly && keyLower === 'e') {
+      event.preventDefault();
+      toggleSidebarPanel('files');
+      return;
+    }
+
     if (altOnly && keyLower === 'v') {
       event.preventDefault();
-      toggleGitSidebar();
+      toggleSidebarPanel('git');
+      return;
+    }
+
+    if (altOnly && keyLower === 'g') {
+      event.preventDefault();
+      toggleSidebarPanel('search');
       return;
     }
 
@@ -387,11 +441,67 @@
       dirtyTabs = {};
       tabMetaMap = {};
       pendingClose = null;
-      await refreshRepoStatus();
+      await Promise.all([fsWatch().catch(() => {}), refreshRepoStatus()]);
     } catch (err) {
       const normalized = err as AppErrorPayload;
       errorMessage = normalized.message ?? 'Gagal membuka folder proyek';
     }
+  }
+
+  function handleEntryRenamed(oldPath: string, newPath: string) {
+    if (!projectState.activeFolder) return;
+    const oldAbs = normalizeTabPath(`${projectState.activeFolder}/${oldPath}`);
+    const newAbs = normalizeTabPath(`${projectState.activeFolder}/${newPath}`);
+
+    for (const ws of session.workspaces) {
+      const panes = listAllPanes(ws.root);
+      for (const pane of panes) {
+        for (const tab of pane.tabs) {
+          if (tab.kind !== 'file' || typeof tab.data.path !== 'string') continue;
+          const currentPath = normalizeTabPath(tab.data.path);
+          if (currentPath === oldAbs) {
+            tab.data = { ...tab.data, path: newAbs };
+            tab.title = extractBaseName(newAbs);
+          } else if (currentPath.startsWith(`${oldAbs}/`)) {
+            const updatedPath = `${newAbs}${currentPath.slice(oldAbs.length)}`;
+            tab.data = { ...tab.data, path: updatedPath };
+            tab.title = extractBaseName(updatedPath);
+          }
+        }
+      }
+    }
+    void refreshRepoStatus();
+  }
+
+  function handleEntryDeleted(deletedPath: string) {
+    if (!projectState.activeFolder) return;
+    const deletedAbs = normalizeTabPath(`${projectState.activeFolder}/${deletedPath}`);
+
+    for (const ws of session.workspaces) {
+      const panes = listAllPanes(ws.root);
+      for (const pane of panes) {
+        const tabsToClose = pane.tabs.filter((tab) => {
+          if (tab.kind !== 'file' || typeof tab.data.path !== 'string') return false;
+          if (dirtyTabs[tab.id]) return false;
+          const currentPath = normalizeTabPath(tab.data.path);
+          return currentPath === deletedAbs || currentPath.startsWith(`${deletedAbs}/`);
+        });
+        for (const tab of tabsToClose) {
+          if (ws.id === session.activeWorkspaceId) {
+            forceCloseTab(pane.id, tab.id);
+          } else {
+            const idx = pane.tabs.findIndex((t) => t.id === tab.id);
+            if (idx !== -1 && pane.tabs.length > 1) {
+              pane.tabs.splice(idx, 1);
+              if (pane.activeTabId === tab.id) {
+                pane.activeTabId = pane.tabs[Math.min(idx, pane.tabs.length - 1)].id;
+              }
+            }
+          }
+        }
+      }
+    }
+    void refreshRepoStatus();
   }
 
   function extractBaseName(filePath: string): string {
@@ -654,20 +764,37 @@
       <div class="workspace-actions">
         <button
           class="folder-switch"
+          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'files'}
+          title="File Tree (Alt+E)"
+          onclick={() => toggleSidebarPanel('files')}
+        >
+          <Files size={14} strokeWidth={2} />
+          <span>File</span>
+        </button>
+        <button
+          class="folder-switch"
           class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'git'}
           title="Panel Git (Alt+V)"
-          onclick={toggleGitSidebar}
+          onclick={() => toggleSidebarPanel('git')}
         >
           <GitBranch size={14} strokeWidth={2} />
           <span>Git</span>
         </button>
         <button
           class="folder-switch"
+          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'search'}
+          title="Cari di Proyek (Alt+G)"
+          onclick={() => toggleSidebarPanel('search')}
+        >
+          <Search size={14} strokeWidth={2} />
+          <span>Cari</span>
+        </button>
+        <button
+          class="folder-switch"
           title="Buka Cepat File (Alt+O)"
           onclick={() => (quickOpenVisible = true)}
         >
-          <Search size={14} strokeWidth={2} />
-          <span>Buka file</span>
+          <span>Buka cepat</span>
         </button>
         <button class="folder-switch" onclick={handleChooseFolder}>
           <FolderOpen size={14} strokeWidth={2} />
@@ -684,13 +811,33 @@
     {/if}
 
     <div class="workbench">
-      {#if session.sidebar.visible && session.sidebar.panel === 'git'}
+      {#if session.sidebar.visible}
         <div class="sidebar-shell" style:width="{session.sidebar.width}px">
-          <GitPanel
-            bind:this={gitPanelRef}
-            onOpenDiff={(relPath, staged) => openDiffInPane(relPath, staged)}
-            onStatusUpdated={(st) => (repoStatus = st)}
-          />
+          {#if session.sidebar.panel === 'files'}
+            <FileTree
+              bind:this={fileTreeRef}
+              workspaceRoot={projectState.activeFolder}
+              {gitBadges}
+              onOpenFile={(fullPath) => openFileInPane(fullPath)}
+              onEntryRenamed={(oldPath, newPath) => handleEntryRenamed(oldPath, newPath)}
+              onEntryDeleted={(deletedPath) => handleEntryDeleted(deletedPath)}
+            />
+          {:else if session.sidebar.panel === 'git'}
+            <GitPanel
+              bind:this={gitPanelRef}
+              onOpenDiff={(relPath, staged) => openDiffInPane(relPath, staged)}
+              onStatusUpdated={(st) => (repoStatus = st)}
+            />
+          {:else if session.sidebar.panel === 'search'}
+            <SearchPanel
+              bind:this={searchPanelRef}
+              onSelectMatch={(relPath, line) => {
+                if (projectState.activeFolder) {
+                  openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
+                }
+              }}
+            />
+          {/if}
         </div>
       {/if}
 

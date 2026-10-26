@@ -1,4 +1,5 @@
 pub mod detect;
+pub mod watcher;
 
 use crate::error::{AppError, AppResult};
 use crate::fs::detect::{

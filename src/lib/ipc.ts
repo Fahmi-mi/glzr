@@ -122,12 +122,21 @@ export interface SessionLoadDto {
   backedUpCorrupt: boolean;
 }
 
+export interface SearchMatchDto {
+  relPath: string;
+  line: number;
+  col: number;
+  snippet: string;
+  matchStart: number;
+  matchEnd: number;
+}
+
 export interface BackendEventMap {
   'pty:output': { sessionId: string; data: string };
   'pty:exit': { sessionId: string; code: number | null };
   'fs:changed': { paths: string[] };
   'fs:watch-error': { message: string };
-  'search:results': { queryId: string; items: unknown[] };
+  'search:results': { queryId: string; items: SearchMatchDto[] };
   'search:done': { queryId: string; truncated: boolean };
   'search:error': { queryId: string; message: string };
 }
@@ -250,6 +259,34 @@ export async function fsLoadDraft(path: string): Promise<DraftDto | null> {
 
 export async function fsClearDraft(path: string): Promise<void> {
   return callCommand<void>('fs_clear_draft', { path });
+}
+
+export async function fsWatch(): Promise<void> {
+  return callCommand<void>('fs_watch');
+}
+
+export async function fsUnwatch(): Promise<void> {
+  return callCommand<void>('fs_unwatch');
+}
+
+export async function searchStart(opts: {
+  queryId: string;
+  pattern: string;
+  caseSensitive: boolean;
+  regex: boolean;
+  glob?: string | null;
+}): Promise<void> {
+  return callCommand<void>('search_start', {
+    queryId: opts.queryId,
+    pattern: opts.pattern,
+    caseSensitive: opts.caseSensitive,
+    regex: opts.regex,
+    glob: opts.glob ?? null
+  });
+}
+
+export async function searchCancel(): Promise<void> {
+  return callCommand<void>('search_cancel');
 }
 
 export async function gitStatus(): Promise<GitStatusDto> {

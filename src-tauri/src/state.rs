@@ -1,5 +1,7 @@
 use crate::error::{AppError, AppResult};
+use crate::fs::watcher::WorkspaceWatcher;
 use crate::pty::session::PtySession;
+use crate::search::{cancel_active_search, ActiveSearchHandle};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
@@ -106,6 +108,8 @@ pub struct AppState {
     pub xdg: XdgPaths,
     pub workspace: Mutex<WorkspaceData>,
     pub pty_sessions: Mutex<HashMap<String, Arc<PtySession>>>,
+    pub fs_watcher: Mutex<Option<WorkspaceWatcher>>,
+    pub active_search: Mutex<Option<ActiveSearchHandle>>,
 }
 
 impl AppState {
@@ -133,6 +137,8 @@ impl AppState {
                 recent_folders,
             }),
             pty_sessions: Mutex::new(HashMap::new()),
+            fs_watcher: Mutex::new(None),
+            active_search: Mutex::new(None),
         }
     }
 
@@ -185,6 +191,18 @@ impl AppState {
                 let _ = session.kill();
             }
         }
+    }
+
+    pub fn stop_watcher(&self) {
+        if let Ok(mut guard) = self.fs_watcher.lock() {
+            if let Some(mut watcher) = guard.take() {
+                watcher.stop();
+            }
+        }
+    }
+
+    pub fn cancel_search(&self) {
+        cancel_active_search(&self.active_search);
     }
 
     pub fn load_session(&self) -> AppResult<SessionLoadDto> {
