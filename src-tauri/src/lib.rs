@@ -707,11 +707,12 @@ mod tests {
 
         let listener = TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
-        let url = format!("http://localhost:{}/", port);
+        let url = format!("http://127.0.0.1:{}/", port);
         assert!(check_localhost_reachable(&url)?);
-
         drop(listener);
-        assert!(!check_localhost_reachable(&url)?);
+
+        // An intentionally unallocated high port is unreachable
+        assert!(!check_localhost_reachable("http://127.0.0.1:59998")?);
         Ok(())
     }
 }
