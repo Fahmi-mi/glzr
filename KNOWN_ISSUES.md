@@ -71,3 +71,9 @@ Daftar masalah yang diketahui, hasil validasi spike teknis, serta mitigasi opera
 - **Status:** Selesai (`src-tauri/src/lib.rs`)
 - **Gejala:** Jendela aplikasi terbuka blank dan WebKitWebProcess memakan 50-100% CPU saat inisialisasi font.
 - **Solusi:** glzr secara otomatis mendeteksi dan membersihkan symlink duplikat pada direktori `~/.cache/fontconfig` saat boot, atau pengguna dapat meregenerasi cache font sistem dengan perintah `fc-cache -f`.
+
+### 10. Biner standalone menampilkan Connection refused ke localhost
+
+- **Status:** Selesai (`src-tauri/Cargo.toml`)
+- **Gejala:** Menjalankan biner standalone release memunculkan pesan error "Could not connect to localhost: Connection refused" karena tidak ada dev server Vite yang berjalan.
+- **Solusi:** Mengaktifkan fitur `custom-protocol = ["tauri/custom-protocol"]` sebagai fitur default di `src-tauri/Cargo.toml`. Hal ini memastikan kompilasi release secara otomatis menyematkan seluruh berkas statis frontend (`../build`) ke dalam biner untuk disajikan langsung via protokol lokal `tauri://localhost`.
