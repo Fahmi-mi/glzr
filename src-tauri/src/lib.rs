@@ -346,7 +346,14 @@ fn pty_spawn(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<PtySpawnDto> {
-    let root = state.active_folder_path()?;
+    let root = state
+        .active_folder_path()
+        .or_else(|_| std::env::current_dir().map_err(AppError::from))
+        .or_else(|_| {
+            std::env::var("HOME")
+                .map(PathBuf::from)
+                .map_err(|_| AppError::Validation("could not resolve working directory".into()))
+        })?;
     let (prog, owned_args) = pty::resolve_default_shell(None);
     let arg_refs: Vec<&str> = owned_args.iter().map(String::as_str).collect();
 
@@ -362,7 +369,14 @@ fn pty_spawn(
 
     let sid = dto.session_id.clone();
     thread::spawn(move || {
-        while let Ok(chunk) = rx.recv() {
+        while let Ok(mut chunk) = rx.recv() {
+            while let Ok(more) = rx.try_recv() {
+                chunk.push_str(&more);
+                if chunk.len() >= 64 * 1024 {
+                    break;
+                }
+            }
+
             let _ = app.emit(
                 "pty:output",
                 PtyOutputEvent {

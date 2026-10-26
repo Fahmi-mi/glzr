@@ -7,6 +7,7 @@
   import { Unicode11Addon } from '@xterm/addon-unicode11';
   import { WebLinksAddon } from '@xterm/addon-web-links';
   import { WebglAddon } from '@xterm/addon-webgl';
+  import { CanvasAddon } from '@xterm/addon-canvas';
   import Globe from '@lucide/svelte/icons/globe';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Search from '@lucide/svelte/icons/search';
@@ -132,7 +133,8 @@
       fontFamily:
         "'JetBrains Mono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize,
-      lineHeight: 1.4,
+      lineHeight: 1.35,
+      smoothScrollDuration: 0,
       theme: {
         background: '#141517',
         foreground: '#e6e8eb',
@@ -177,14 +179,29 @@
 
     instance.open(hostEl);
 
+    let rendererLoaded = false;
     try {
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => {
         webgl.dispose();
+        try {
+          instance.loadAddon(new CanvasAddon());
+        } catch {
+          // Fallback to DOM renderer
+        }
       });
       instance.loadAddon(webgl);
+      rendererLoaded = true;
     } catch {
-      // Fallback to default renderer
+      // WebGL unavailable on current display stack
+    }
+
+    if (!rendererLoaded) {
+      try {
+        instance.loadAddon(new CanvasAddon());
+      } catch {
+        // Fallback to DOM renderer
+      }
     }
 
     instance.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
