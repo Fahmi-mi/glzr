@@ -65,7 +65,7 @@ jobs:
           cache: npm
       - name: Run npm audit
         run: npm audit --omit=dev
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: src-tauri
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Run cargo audit
+        run: cargo audit
+        working-directory: src-tauri
