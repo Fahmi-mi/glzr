@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeIpcError } from './ipc';
+import { normalizeIpcError, projectGetState } from './ipc';
 import { createInitialSession, createInitialWorkspace } from './layout/types';
 
 describe('core foundation types and ipc error normalization', () => {
@@ -35,6 +35,13 @@ describe('core foundation types and ipc error normalization', () => {
     expect(normalizeIpcError(new Error('network failure'))).toEqual({
       kind: 'error',
       message: 'network failure'
+    });
+  });
+
+  it('handles invocation outside tauri environment gracefully with normalized error', async () => {
+    await expect(projectGetState()).rejects.toMatchObject({
+      kind: expect.any(String),
+      message: expect.any(String)
     });
   });
 });

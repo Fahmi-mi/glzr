@@ -19,7 +19,7 @@ Daftar masalah yang diketahui, hasil validasi spike teknis, serta mitigasi opera
 
 - **Status:** Tersedia mitigasi lingkungan
 - **Gejala:** Jendela aplikasi tampak kosong atau putih saat dijalankan pada sistem Linux dengan driver NVIDIA proprietary atau grafis hybrid.
-- **Solusi:** Jalankan dengan environment variable `WEBKIT_DISABLE_DMABUF_RENDERER=1` (glzr otomatis menyetel variabel ini jika mendeteksi driver NVIDIA). Modul `pty` otomatis membersihkan variabel `WEBKIT_*` sebelum men-spawn shell agar tidak bocor ke subproses terminal.
+- **Solusi:** Jalankan dengan environment variable `WEBKIT_DISABLE_DMABUF_RENDERER=1` dan `WEBKIT_DISABLE_COMPOSITING_MODE=1` (glzr otomatis menyetel kedua variabel ini jika mendeteksi driver NVIDIA). Modul `pty` otomatis membersihkan variabel `WEBKIT_*` sebelum men-spawn shell agar tidak bocor ke subproses terminal.
 
 ### 2. Karakter UTF-8 rusak saat output terminal sangat deras
 

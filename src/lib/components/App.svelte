@@ -441,12 +441,14 @@
   }
 
   onMount(async () => {
-    unlistenFsChanged = await onBackendEvent('fs:changed', () => {
-      void fileTreeRef?.refresh();
-      void refreshRepoStatus();
-    });
-
     try {
+      if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        unlistenFsChanged = await onBackendEvent('fs:changed', () => {
+          void fileTreeRef?.refresh();
+          void refreshRepoStatus();
+        });
+      }
+
       const [state, loadedSession, loadedSettings] = await Promise.all([
         projectGetState(),
         sessionLoad().catch(() => ({ rawJson: null, backedUpCorrupt: false })),
