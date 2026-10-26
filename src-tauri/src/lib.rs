@@ -574,8 +574,23 @@ where
     None
 }
 
+#[cfg(target_os = "linux")]
+pub fn configure_linux_webkit_environment() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        let has_nvidia = Path::new("/dev/nvidia0").exists()
+            || Path::new("/proc/driver/nvidia").exists()
+            || Path::new("/sys/module/nvidia").exists();
+        if has_nvidia {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    configure_linux_webkit_environment();
+
     let xdg = XdgPaths::resolve()
         .unwrap_or_else(|_| XdgPaths::from_base_env(Path::new("/tmp"), None, None, None, None));
     let initial_folder = resolve_cli_folder_arg(std::env::args());
@@ -714,5 +729,17 @@ mod tests {
         // An intentionally unallocated high port is unreachable
         assert!(!check_localhost_reachable("http://127.0.0.1:59998")?);
         Ok(())
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn auto_detects_or_preserves_linux_webkit_environment() {
+        configure_linux_webkit_environment();
+        if Path::new("/dev/nvidia0").exists() || Path::new("/proc/driver/nvidia").exists() {
+            assert_eq!(
+                std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").as_deref(),
+                Ok("1")
+            );
+        }
     }
 }
