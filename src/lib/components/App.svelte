@@ -3,13 +3,18 @@
   import Files from '@lucide/svelte/icons/files';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import GitBranch from '@lucide/svelte/icons/git-branch';
+  import Moon from '@lucide/svelte/icons/moon';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
+  import Sun from '@lucide/svelte/icons/sun';
   import X from '@lucide/svelte/icons/x';
   import {
+    createDefaultSettings,
     fsClearDraft,
     fsUnwatch,
     fsWatch,
+    gitPull,
+    gitPush,
     gitStatus,
     normalizeTabPath,
     onBackendEvent,
@@ -18,11 +23,15 @@
     projectOpenFolder,
     sessionLoad,
     sessionSave,
+    settingsLoad,
+    settingsSave,
     type AppErrorPayload,
+    type AppSettingsDto,
     type GitBadge,
     type GitStatusDto,
     type ProjectStateDto
   } from '$lib/ipc';
+  import { resolveGlobalShortcut, type PaletteEntry } from '$lib/keymap';
   import {
     closePane,
     findDirectionalNeighborPane,
@@ -42,6 +51,7 @@
     type Tab
   } from '$lib/layout/types';
   import { formatPreviewTabTitle, normalizePreviewUrl } from '$lib/preview';
+  import CommandPalette from '$lib/components/CommandPalette.svelte';
   import PaneNode from '$lib/components/PaneNode.svelte';
   import QuickOpen from '$lib/components/QuickOpen.svelte';
   import FileTree from '$lib/components/sidebar/FileTree.svelte';
@@ -56,10 +66,13 @@
     recentFolders: []
   });
   let session = $state<SessionFile>(createInitialSession(null));
+  let settings = $state<AppSettingsDto>(createDefaultSettings());
   let errorMessage = $state<string | null>(null);
   let sessionNotice = $state<string | null>(null);
   let loading = $state(true);
   let quickOpenVisible = $state(false);
+  let commandPaletteVisible = $state(false);
+  let draggingSidebar = $state(false);
 
   let focusedPaneByWs = $state<Record<string, string>>({});
   let maximizedPaneByWs = $state<Record<string, string | null>>({});
@@ -146,6 +159,275 @@
     }
   });
 
+  $effect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = settings.appearance.theme;
+      document.documentElement.dataset.font = settings.appearance.fontFamily;
+      document.documentElement.style.setProperty(
+        '--font-size-code',
+        `${settings.appearance.fontSize}px`
+      );
+    }
+  });
+
+  async function persistSettings() {
+    await settingsSave(settings).catch(() => {});
+  }
+
+  function toggleTheme() {
+    settings.appearance.theme = settings.appearance.theme === 'dark' ? 'light' : 'dark';
+    void persistSettings();
+  }
+
+  function toggleFontFamily() {
+    settings.appearance.fontFamily =
+      settings.appearance.fontFamily === 'system-mono' ? 'jetbrains-mono-nerd' : 'system-mono';
+    void persistSettings();
+  }
+
+  function adjustCodeFontSize(delta: number | 'reset') {
+    if (delta === 'reset') {
+      settings.appearance.fontSize = 14;
+    } else {
+      const next = Math.min(28, Math.max(10, settings.appearance.fontSize + delta));
+      settings.appearance.fontSize = next;
+    }
+    void persistSettings();
+  }
+
+  function startSidebarResize(event: MouseEvent) {
+    event.preventDefault();
+    draggingSidebar = true;
+    const startX = event.clientX;
+    const startWidth = session.sidebar.width;
+
+    function handleMove(moveEvent: MouseEvent) {
+      const next = Math.min(
+        480,
+        Math.max(160, Math.round(startWidth + moveEvent.clientX - startX))
+      );
+      session.sidebar.width = next;
+    }
+
+    function handleUp() {
+      draggingSidebar = false;
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    }
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }
+
+  const paletteActions = $derived.by<PaletteEntry[]>(() => {
+    const kb = settings.keybindings;
+    const entries: PaletteEntry[] = [
+      {
+        id: 'act:split-right',
+        label: 'Split kanan',
+        category: 'Aksi',
+        shortcut: kb.splitRight,
+        keywords: 'pane belah kanan horizontal',
+        run: () => handleSplitPane(focusedPaneId, 'row')
+      },
+      {
+        id: 'act:split-down',
+        label: 'Split bawah',
+        category: 'Aksi',
+        shortcut: kb.splitDown,
+        keywords: 'pane belah bawah vertikal',
+        run: () => handleSplitPane(focusedPaneId, 'column')
+      },
+      {
+        id: 'act:new-terminal',
+        label: 'Terminal baru di pane aktif',
+        category: 'Aksi',
+        shortcut: kb.newTerminal,
+        keywords: 'shell pty bash zsh',
+        run: () => addTerminalTab(focusedPaneId)
+      },
+      {
+        id: 'act:new-preview',
+        label: 'Preview localhost baru',
+        category: 'Aksi',
+        keywords: 'browser iframe server port 5173',
+        run: () => openPreviewInPane('http://localhost:5173/', focusedPaneId)
+      },
+      {
+        id: 'act:quick-open',
+        label: 'Buka cepat file...',
+        category: 'Aksi',
+        shortcut: kb.quickOpen,
+        keywords: 'quick open cari file',
+        run: () => {
+          quickOpenVisible = true;
+        }
+      },
+      {
+        id: 'act:open-folder',
+        label: 'Buka folder',
+        category: 'Aksi',
+        keywords: 'proyek direktori pilih',
+        run: () => {
+          void handleChooseFolder();
+        }
+      },
+      {
+        id: 'act:sidebar-files',
+        label: 'Toggle Sidebar Files',
+        category: 'Aksi',
+        shortcut: kb.sidebarFiles,
+        keywords: 'file tree pohon berkas',
+        run: () => toggleSidebarPanel('files')
+      },
+      {
+        id: 'act:sidebar-git',
+        label: 'Toggle Sidebar Git',
+        category: 'Aksi',
+        shortcut: kb.sidebarGit,
+        keywords: 'version control diff commit',
+        run: () => toggleSidebarPanel('git')
+      },
+      {
+        id: 'act:sidebar-search',
+        label: 'Toggle Sidebar Search (Cari di Proyek)',
+        category: 'Aksi',
+        shortcut: kb.sidebarSearch,
+        keywords: 'ripgrep rg grep cari teks',
+        run: () => toggleSidebarPanel('search')
+      },
+      {
+        id: 'act:maximize-pane',
+        label: 'Maximize / Kembalikan ukuran pane',
+        category: 'Aksi',
+        shortcut: kb.maximizePane,
+        keywords: 'penuh fokus perbesar',
+        run: () => handleToggleMaximizePane(focusedPaneId)
+      },
+      {
+        id: 'act:close-tab',
+        label: 'Tutup tab aktif',
+        category: 'Aksi',
+        shortcut: kb.closeTab,
+        run: () => {
+          if (focusedPane && activeTab) {
+            requestCloseTab(focusedPane.id, activeTab.id);
+          }
+        }
+      },
+      {
+        id: 'act:close-pane',
+        label: 'Tutup pane aktif',
+        category: 'Aksi',
+        shortcut: kb.closePane,
+        run: () => handleClosePane(focusedPaneId)
+      },
+      {
+        id: 'act:new-workspace',
+        label: 'Workspace baru',
+        category: 'Aksi',
+        keywords: 'ruang kerja tambah',
+        run: () => handleAddWorkspace()
+      },
+      {
+        id: 'act:close-workspace',
+        label: 'Tutup workspace aktif',
+        category: 'Aksi',
+        keywords: 'ruang kerja hapus',
+        run: () => handleCloseWorkspace(session.activeWorkspaceId)
+      },
+      {
+        id: 'act:toggle-theme',
+        label: `Ganti tema ke ${settings.appearance.theme === 'dark' ? 'Light' : 'Dark'}`,
+        category: 'Aksi',
+        keywords: 'theme dark light terang gelap warna',
+        run: () => toggleTheme()
+      },
+      {
+        id: 'act:toggle-font',
+        label: `Ganti font ke ${
+          settings.appearance.fontFamily === 'system-mono'
+            ? 'JetBrains Mono Nerd'
+            : 'Monospace Sistem'
+        }`,
+        category: 'Aksi',
+        keywords: 'font huruf tipografi jetbrains',
+        run: () => toggleFontFamily()
+      },
+      {
+        id: 'act:zoom-in',
+        label: 'Perbesar ukuran font',
+        category: 'Aksi',
+        shortcut: 'Alt+=',
+        run: () => adjustCodeFontSize(1)
+      },
+      {
+        id: 'act:zoom-out',
+        label: 'Perkecil ukuran font',
+        category: 'Aksi',
+        shortcut: 'Alt+-',
+        run: () => adjustCodeFontSize(-1)
+      },
+      {
+        id: 'act:zoom-reset',
+        label: 'Reset ukuran font (14px)',
+        category: 'Aksi',
+        shortcut: 'Alt+0',
+        run: () => adjustCodeFontSize('reset')
+      },
+      {
+        id: 'act:git-pull',
+        label: 'Git: Pull dari remote',
+        category: 'Aksi',
+        run: () => {
+          void gitPull()
+            .then(() => refreshRepoStatus())
+            .catch((err: AppErrorPayload) => {
+              sessionNotice = err.message ?? 'Git pull gagal';
+            });
+        }
+      },
+      {
+        id: 'act:git-push',
+        label: 'Git: Push ke remote',
+        category: 'Aksi',
+        run: () => {
+          void gitPush()
+            .then(() => refreshRepoStatus())
+            .catch((err: AppErrorPayload) => {
+              sessionNotice = err.message ?? 'Git push gagal';
+            });
+        }
+      }
+    ];
+
+    for (const ws of session.workspaces) {
+      entries.push({
+        id: `ws:${ws.id}`,
+        label: `Pindah ke workspace ${ws.name}`,
+        category: 'Workspace',
+        run: () => {
+          session.activeWorkspaceId = ws.id;
+        }
+      });
+    }
+
+    for (const recent of projectState.recentFolders) {
+      if (recent !== projectState.activeFolder) {
+        entries.push({
+          id: `recent:${recent}`,
+          label: `Buka folder terakhir: ${recent}`,
+          category: 'Aksi',
+          run: () => {
+            void openFolderByPath(recent);
+          }
+        });
+      }
+    }
+
+    return entries;
+  });
+
   async function refreshRepoStatus() {
     if (!projectState.activeFolder) {
       repoStatus = null;
@@ -165,14 +447,19 @@
     });
 
     try {
-      const [state, loadedSession] = await Promise.all([
+      const [state, loadedSession, loadedSettings] = await Promise.all([
         projectGetState(),
-        sessionLoad().catch(() => ({ rawJson: null, backedUpCorrupt: false }))
+        sessionLoad().catch(() => ({ rawJson: null, backedUpCorrupt: false })),
+        settingsLoad().catch(() => ({ settings: createDefaultSettings(), warnings: [] }))
       ]);
       projectState = state;
+      settings = loadedSettings.settings;
+
       if (loadedSession.backedUpCorrupt) {
         sessionNotice =
           'File sesi sebelumnya tidak kompatibel atau rusak dan telah dicadangkan ke session.json.bak.';
+      } else if (loadedSettings.warnings.length > 0) {
+        sessionNotice = loadedSettings.warnings[0];
       }
 
       if (state.activeFolder) {
@@ -303,118 +590,104 @@
     if (!projectState.activeFolder || !activeWorkspace) return;
 
     const terminalFocused = activeTab?.kind === 'terminal';
-    const altOnly = event.altKey && !event.ctrlKey && !event.metaKey;
-    const keyLower = event.key.toLowerCase();
+    const action = resolveGlobalShortcut(
+      {
+        key: event.key,
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey
+      },
+      terminalFocused,
+      settings.keybindings
+    );
 
-    const isAltO = altOnly && keyLower === 'o';
-    const isCtrlP =
-      !terminalFocused && (event.ctrlKey || event.metaKey) && !event.altKey && keyLower === 'p';
+    if (!action) return;
 
-    if (isAltO || isCtrlP) {
-      event.preventDefault();
-      quickOpenVisible = true;
-      return;
-    }
+    event.preventDefault();
 
-    if (altOnly && keyLower === 'e') {
-      event.preventDefault();
-      toggleSidebarPanel('files');
-      return;
-    }
-
-    if (altOnly && keyLower === 'v') {
-      event.preventDefault();
-      toggleSidebarPanel('git');
-      return;
-    }
-
-    if (altOnly && keyLower === 'g') {
-      event.preventDefault();
-      toggleSidebarPanel('search');
-      return;
-    }
-
-    if (altOnly && keyLower === 't') {
-      event.preventDefault();
-      addTerminalTab(focusedPaneId);
-      return;
-    }
-
-    if (altOnly && keyLower === 'r') {
-      event.preventDefault();
-      handleSplitPane(focusedPaneId, 'row');
-      return;
-    }
-
-    if (altOnly && keyLower === 'j') {
-      event.preventDefault();
-      handleSplitPane(focusedPaneId, 'column');
-      return;
-    }
-
-    if (altOnly && keyLower === 'q') {
-      event.preventDefault();
-      handleClosePane(focusedPaneId);
-      return;
-    }
-
-    if (altOnly && keyLower === 'm') {
-      event.preventDefault();
-      handleToggleMaximizePane(focusedPaneId);
-      return;
-    }
-
-    if (
-      altOnly &&
-      (event.key === 'ArrowLeft' ||
-        event.key === 'ArrowRight' ||
-        event.key === 'ArrowUp' ||
-        event.key === 'ArrowDown')
-    ) {
-      event.preventDefault();
-      const dirMap: Record<string, 'left' | 'right' | 'up' | 'down'> = {
-        ArrowLeft: 'left',
-        ArrowRight: 'right',
-        ArrowUp: 'up',
-        ArrowDown: 'down'
-      };
-      const neighbor = findDirectionalNeighborPane(
-        activeWorkspace.root,
-        focusedPaneId,
-        dirMap[event.key]
-      );
-      if (neighbor) {
-        setFocusedPane(neighbor);
+    if (typeof action === 'object' && action.type === 'switch_workspace') {
+      if (action.index >= 0 && action.index < session.workspaces.length) {
+        session.activeWorkspaceId = session.workspaces[action.index].id;
       }
       return;
     }
 
-    if (altOnly && /^[1-9]$/.test(event.key)) {
-      const idx = Number.parseInt(event.key, 10) - 1;
-      if (idx >= 0 && idx < session.workspaces.length) {
-        event.preventDefault();
-        session.activeWorkspaceId = session.workspaces[idx].id;
+    switch (action) {
+      case 'command_palette':
+        commandPaletteVisible = !commandPaletteVisible;
+        break;
+      case 'quick_open':
+        quickOpenVisible = true;
+        break;
+      case 'sidebar_files':
+        toggleSidebarPanel('files');
+        break;
+      case 'sidebar_git':
+        toggleSidebarPanel('git');
+        break;
+      case 'sidebar_search':
+        toggleSidebarPanel('search');
+        break;
+      case 'new_terminal':
+        addTerminalTab(focusedPaneId);
+        break;
+      case 'close_tab':
+        if (focusedPane && activeTab) {
+          requestCloseTab(focusedPane.id, activeTab.id);
+        }
+        break;
+      case 'split_right':
+        handleSplitPane(focusedPaneId, 'row');
+        break;
+      case 'split_down':
+        handleSplitPane(focusedPaneId, 'column');
+        break;
+      case 'close_pane':
+        handleClosePane(focusedPaneId);
+        break;
+      case 'maximize_pane':
+        handleToggleMaximizePane(focusedPaneId);
+        break;
+      case 'pane_left':
+      case 'pane_right':
+      case 'pane_up':
+      case 'pane_down': {
+        const dirMap = {
+          pane_left: 'left',
+          pane_right: 'right',
+          pane_up: 'up',
+          pane_down: 'down'
+        } as const;
+        const neighbor = findDirectionalNeighborPane(
+          activeWorkspace.root,
+          focusedPaneId,
+          dirMap[action]
+        );
+        if (neighbor) {
+          setFocusedPane(neighbor);
+        }
+        break;
       }
-      return;
-    }
-
-    const isCtrlW =
-      !terminalFocused && (event.ctrlKey || event.metaKey) && !event.altKey && keyLower === 'w';
-    const isAltW = altOnly && keyLower === 'w';
-    if ((isCtrlW || isAltW) && focusedPane && activeTab) {
-      event.preventDefault();
-      requestCloseTab(focusedPane.id, activeTab.id);
-      return;
-    }
-
-    if (altOnly && focusedPane && focusedPane.tabs.length > 1) {
-      if (event.key === 'PageDown' || event.key === 'PageUp') {
-        event.preventDefault();
-        const curIdx = focusedPane.tabs.findIndex((t) => t.id === focusedPane.activeTabId);
-        const delta = event.key === 'PageDown' ? 1 : -1;
-        const nextIdx = (curIdx + delta + focusedPane.tabs.length) % focusedPane.tabs.length;
-        focusedPane.activeTabId = focusedPane.tabs[nextIdx].id;
+      case 'next_tab':
+      case 'prev_tab': {
+        if (focusedPane && focusedPane.tabs.length > 1) {
+          const curIdx = focusedPane.tabs.findIndex((t) => t.id === focusedPane.activeTabId);
+          const delta = action === 'next_tab' ? 1 : -1;
+          const nextIdx = (curIdx + delta + focusedPane.tabs.length) % focusedPane.tabs.length;
+          focusedPane.activeTabId = focusedPane.tabs[nextIdx].id;
+        }
+        break;
       }
+      case 'zoom_in':
+        adjustCodeFontSize(1);
+        break;
+      case 'zoom_out':
+        adjustCodeFontSize(-1);
+        break;
+      case 'zoom_reset':
+        adjustCodeFontSize('reset');
+        break;
     }
   }
 
@@ -841,10 +1114,22 @@
         </button>
         <button
           class="folder-switch"
-          title="Buka Cepat File (Alt+O)"
-          onclick={() => (quickOpenVisible = true)}
+          title="Command Palette (Alt+P)"
+          onclick={() => (commandPaletteVisible = true)}
         >
-          <span>Buka cepat</span>
+          <span>Perintah</span>
+        </button>
+        <button
+          class="icon-btn"
+          title="Ganti tema ({settings.appearance.theme === 'dark' ? 'Light' : 'Dark'})"
+          aria-label="Ganti tema"
+          onclick={toggleTheme}
+        >
+          {#if settings.appearance.theme === 'dark'}
+            <Sun size={14} strokeWidth={2} />
+          {:else}
+            <Moon size={14} strokeWidth={2} />
+          {/if}
         </button>
         <button class="folder-switch" onclick={handleChooseFolder}>
           <FolderOpen size={14} strokeWidth={2} />
@@ -863,31 +1148,66 @@
     <div class="workbench">
       {#if session.sidebar.visible}
         <div class="sidebar-shell" style:width="{session.sidebar.width}px">
-          {#if session.sidebar.panel === 'files'}
-            <FileTree
-              bind:this={fileTreeRef}
-              workspaceRoot={projectState.activeFolder}
-              {gitBadges}
-              onOpenFile={(fullPath) => openFileInPane(fullPath)}
-              onEntryRenamed={(oldPath, newPath) => handleEntryRenamed(oldPath, newPath)}
-              onEntryDeleted={(deletedPath) => handleEntryDeleted(deletedPath)}
-            />
-          {:else if session.sidebar.panel === 'git'}
-            <GitPanel
-              bind:this={gitPanelRef}
-              onOpenDiff={(relPath, staged) => openDiffInPane(relPath, staged)}
-              onStatusUpdated={(st) => (repoStatus = st)}
-            />
-          {:else if session.sidebar.panel === 'search'}
-            <SearchPanel
-              bind:this={searchPanelRef}
-              onSelectMatch={(relPath, line) => {
-                if (projectState.activeFolder) {
-                  openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
-                }
-              }}
-            />
-          {/if}
+          <div class="sidebar-tabs-bar">
+            <button
+              class="sidebar-tab-btn"
+              class:active={session.sidebar.panel === 'files'}
+              onclick={() => (session.sidebar.panel = 'files')}
+            >
+              Files
+            </button>
+            <button
+              class="sidebar-tab-btn"
+              class:active={session.sidebar.panel === 'git'}
+              onclick={() => (session.sidebar.panel = 'git')}
+            >
+              Git
+            </button>
+            <button
+              class="sidebar-tab-btn"
+              class:active={session.sidebar.panel === 'search'}
+              onclick={() => (session.sidebar.panel = 'search')}
+            >
+              Search
+            </button>
+          </div>
+
+          <div class="sidebar-body">
+            {#if session.sidebar.panel === 'files'}
+              <FileTree
+                bind:this={fileTreeRef}
+                workspaceRoot={projectState.activeFolder}
+                {gitBadges}
+                onOpenFile={(fullPath) => openFileInPane(fullPath)}
+                onEntryRenamed={(oldPath, newPath) => handleEntryRenamed(oldPath, newPath)}
+                onEntryDeleted={(deletedPath) => handleEntryDeleted(deletedPath)}
+              />
+            {:else if session.sidebar.panel === 'git'}
+              <GitPanel
+                bind:this={gitPanelRef}
+                onOpenDiff={(relPath, staged) => openDiffInPane(relPath, staged)}
+                onStatusUpdated={(st) => (repoStatus = st)}
+              />
+            {:else if session.sidebar.panel === 'search'}
+              <SearchPanel
+                bind:this={searchPanelRef}
+                onSelectMatch={(relPath, line) => {
+                  if (projectState.activeFolder) {
+                    openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
+                  }
+                }}
+              />
+            {/if}
+          </div>
+
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <div
+            class="sidebar-resizer"
+            class:active={draggingSidebar}
+            role="separator"
+            aria-orientation="vertical"
+            onmousedown={startSidebarResize}
+          ></div>
         </div>
       {/if}
 
@@ -989,6 +1309,14 @@
       workspaceRoot={projectState.activeFolder}
       onClose={() => (quickOpenVisible = false)}
       onSelect={(fullPath, line) => openFileInPane(fullPath, line)}
+    />
+
+    <CommandPalette
+      open={commandPaletteVisible}
+      workspaceRoot={projectState.activeFolder}
+      actions={paletteActions}
+      onSelectFile={(fullPath, line) => openFileInPane(fullPath, line)}
+      onClose={() => (commandPaletteVisible = false)}
     />
 
     {#if pendingClose}
@@ -1205,10 +1533,60 @@
   }
 
   .sidebar-shell {
+    position: relative;
     height: 100%;
     border-right: 1px solid var(--bd);
     flex-shrink: 0;
     min-height: 0;
+    background: var(--pn);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-tabs-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 10px 6px;
+    border-bottom: 1px solid var(--bd);
+  }
+
+  .sidebar-tab-btn {
+    height: 26px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: var(--radius-ctrl);
+    background: transparent;
+    color: var(--dm);
+    font-size: 12px;
+  }
+
+  .sidebar-tab-btn.active {
+    background: var(--el);
+    color: var(--tx);
+  }
+
+  .sidebar-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-resizer {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 25;
+  }
+
+  .sidebar-resizer:hover,
+  .sidebar-resizer.active {
+    background: var(--ac);
   }
 
   .workspaces-stage {
