@@ -12,6 +12,7 @@
   import type { LayoutNode, Pane, Tab } from '$lib/layout/types';
   import DiffTab from '$lib/components/tabs/DiffTab.svelte';
   import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
+  import PreviewTab from '$lib/components/tabs/PreviewTab.svelte';
   import TerminalTab from '$lib/components/tabs/TerminalTab.svelte';
   import Self from './PaneNode.svelte';
 
@@ -26,6 +27,8 @@
     onSelectTab: (paneId: string, tabId: string) => void;
     onCloseTab: (paneId: string, tabId: string) => void;
     onAddTerminalTab: (paneId: string) => void;
+    onAddPreviewTab: (paneId: string, url?: string) => void;
+    onUpdatePreviewTab: (paneId: string, tabId: string, url: string, title: string) => void;
     onRequestQuickOpen: (paneId: string) => void;
     onSplitPane: (paneId: string, direction: 'row' | 'column') => void;
     onToggleMaximizePane: (paneId: string) => void;
@@ -49,6 +52,8 @@
     onSelectTab,
     onCloseTab,
     onAddTerminalTab,
+    onAddPreviewTab,
+    onUpdatePreviewTab,
     onRequestQuickOpen,
     onSplitPane,
     onToggleMaximizePane,
@@ -153,6 +158,8 @@
         {onSelectTab}
         {onCloseTab}
         {onAddTerminalTab}
+        {onAddPreviewTab}
+        {onUpdatePreviewTab}
         {onRequestQuickOpen}
         {onSplitPane}
         {onToggleMaximizePane}
@@ -187,6 +194,8 @@
         {onSelectTab}
         {onCloseTab}
         {onAddTerminalTab}
+        {onAddPreviewTab}
+        {onUpdatePreviewTab}
         {onRequestQuickOpen}
         {onSplitPane}
         {onToggleMaximizePane}
@@ -304,6 +313,16 @@
                 class="dropdown-item"
                 onclick={() => {
                   menuOpen = false;
+                  onAddPreviewTab(node.id);
+                }}
+              >
+                <Globe size={14} strokeWidth={2} />
+                <span>Preview localhost</span>
+              </button>
+              <button
+                class="dropdown-item"
+                onclick={() => {
+                  menuOpen = false;
                   onSplitPane(node.id, 'row');
                 }}
               >
@@ -362,6 +381,19 @@
         <TerminalTab
           sessionId={termTab.id}
           visible={workspaceVisible && activePaneTab?.id === termTab.id}
+          onOpenLocalhost={(url) => onAddPreviewTab(node.id, url)}
+        />
+      {/each}
+
+      {#each node.tabs.filter((t) => t.kind === 'preview') as previewTab (previewTab.id)}
+        <PreviewTab
+          url={typeof previewTab.data.url === 'string'
+            ? previewTab.data.url
+            : 'http://localhost:5173/'}
+          visible={workspaceVisible && activePaneTab?.id === previewTab.id}
+          onUrlChange={(nextUrl, nextTitle) => {
+            onUpdatePreviewTab(node.id, previewTab.id, nextUrl, nextTitle);
+          }}
         />
       {/each}
 

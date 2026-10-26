@@ -7,6 +7,7 @@
   import { Unicode11Addon } from '@xterm/addon-unicode11';
   import { WebLinksAddon } from '@xterm/addon-web-links';
   import { WebglAddon } from '@xterm/addon-webgl';
+  import Globe from '@lucide/svelte/icons/globe';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
@@ -19,6 +20,7 @@
     ptyWrite,
     type AppErrorPayload
   } from '$lib/ipc';
+  import { formatPreviewTabTitle } from '$lib/preview';
   import {
     clampTerminalFontSize,
     extractLocalhostUrl,
@@ -42,6 +44,7 @@
   let exitCode = $state<number | null>(null);
   let errorMsg = $state<string | null>(null);
   let pendingLargePaste = $state<string | null>(null);
+  let detectedLocalUrl = $state<string | null>(null);
   let fontSize = $state(14);
 
   let term: Terminal | null = null;
@@ -258,6 +261,12 @@
     unlistenOutput = await onBackendEvent('pty:output', (payload) => {
       if (payload.sessionId === sessionId && term) {
         term.write(payload.data);
+        if (payload.data.length <= 2048) {
+          const found = extractLocalhostUrl(payload.data);
+          if (found) {
+            detectedLocalUrl = found;
+          }
+        }
       }
     });
 
@@ -357,6 +366,31 @@
   {/if}
 
   <div class="xterm-stage" bind:this={hostEl}></div>
+
+  {#if detectedLocalUrl && onOpenLocalhost}
+    <div class="detected-url-pill">
+      <button
+        class="open-preview-btn"
+        title="Buka di tab preview"
+        onclick={() => {
+          if (detectedLocalUrl) {
+            onOpenLocalhost(detectedLocalUrl);
+            detectedLocalUrl = null;
+          }
+        }}
+      >
+        <Globe size={12} strokeWidth={2} />
+        <span>Preview {formatPreviewTabTitle(detectedLocalUrl)}</span>
+      </button>
+      <button
+        class="dismiss-pill-btn"
+        aria-label="Sembunyikan notifikasi port"
+        onclick={() => (detectedLocalUrl = null)}
+      >
+        <X size={11} strokeWidth={2} />
+      </button>
+    </div>
+  {/if}
 
   {#if exited}
     <div class="terminal-banner exited">
@@ -470,5 +504,45 @@
     padding: 0 8px;
     font-size: 12px;
     gap: 4px;
+  }
+
+  .detected-url-pill {
+    position: absolute;
+    right: 16px;
+    bottom: 14px;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    background: var(--el);
+    border: 1px solid var(--bd);
+    border-radius: var(--radius-ctrl);
+    padding: 2px;
+  }
+
+  .open-preview-btn {
+    height: 24px;
+    padding: 0 8px;
+    border: none;
+    background: transparent;
+    color: var(--ac);
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .open-preview-btn:hover {
+    background: var(--acs);
+  }
+
+  .dismiss-pill-btn {
+    width: 22px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--dm);
+  }
+
+  .dismiss-pill-btn:hover {
+    color: var(--tx);
   }
 </style>

@@ -41,6 +41,7 @@
     type SessionFile,
     type Tab
   } from '$lib/layout/types';
+  import { formatPreviewTabTitle, normalizePreviewUrl } from '$lib/preview';
   import PaneNode from '$lib/components/PaneNode.svelte';
   import QuickOpen from '$lib/components/QuickOpen.svelte';
   import FileTree from '$lib/components/sidebar/FileTree.svelte';
@@ -602,6 +603,55 @@
     setFocusedPane(pane.id);
   }
 
+  export function openPreviewInPane(
+    rawUrl: string = 'http://localhost:5173/',
+    targetPaneId?: string
+  ) {
+    if (!activeWorkspace) return;
+    const pane = findPaneById(activeWorkspace.root, targetPaneId ?? focusedPaneId);
+    if (!pane) return;
+
+    const normalizedUrl = normalizePreviewUrl(rawUrl) ?? 'http://localhost:5173/';
+    const existing = pane.tabs.find(
+      (t) =>
+        t.kind === 'preview' &&
+        (normalizePreviewUrl(String(t.data.url ?? '')) ?? '') === normalizedUrl
+    );
+
+    if (existing) {
+      existing.data = { ...existing.data, url: normalizedUrl };
+      existing.title = formatPreviewTabTitle(normalizedUrl);
+      pane.activeTabId = existing.id;
+      setFocusedPane(pane.id);
+      return;
+    }
+
+    const newId = nextId('tab');
+    pane.tabs.push({
+      id: newId,
+      kind: 'preview',
+      title: formatPreviewTabTitle(normalizedUrl),
+      data: { url: normalizedUrl }
+    });
+    pane.activeTabId = newId;
+    setFocusedPane(pane.id);
+  }
+
+  function updatePreviewTab(
+    wsRoot: SessionFile['workspaces'][number]['root'],
+    paneId: string,
+    tabId: string,
+    nextUrl: string,
+    nextTitle: string
+  ) {
+    const pane = findPaneById(wsRoot, paneId);
+    if (!pane) return;
+    const tab = pane.tabs.find((t) => t.id === tabId);
+    if (!tab || tab.kind !== 'preview') return;
+    tab.data = { ...tab.data, url: nextUrl };
+    tab.title = nextTitle;
+  }
+
   function requestCloseTab(paneId: string, tabId: string) {
     if (dirtyTabs[tabId]) {
       pendingClose = { paneId, tabId };
@@ -865,6 +915,10 @@
               }}
               onCloseTab={(paneId, tabId) => requestCloseTab(paneId, tabId)}
               onAddTerminalTab={(paneId) => addTerminalTab(paneId)}
+              onAddPreviewTab={(paneId, url) => openPreviewInPane(url, paneId)}
+              onUpdatePreviewTab={(paneId, tabId, nextUrl, nextTitle) => {
+                updatePreviewTab(ws.root, paneId, tabId, nextUrl, nextTitle);
+              }}
               onRequestQuickOpen={(paneId) => {
                 focusedPaneByWs[ws.id] = paneId;
                 quickOpenVisible = true;

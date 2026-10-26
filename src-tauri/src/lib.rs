@@ -18,10 +18,12 @@ use crate::search::{
     DEFAULT_SNIPPET_MAX_CHARS,
 };
 use crate::state::{AppState, ProjectStateDto, SessionLoadDto, XdgPaths};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::thread;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State, Window, WindowEvent};
 
 #[tauri::command]
@@ -469,6 +471,71 @@ fn open_external(target: String) -> AppResult<()> {
     Ok(())
 }
 
+fn parse_localhost_target(raw_url: &str) -> AppResult<(String, u16)> {
+    let trimmed = raw_url.trim();
+    let (scheme, rest) = if let Some(after) = trimmed.strip_prefix("http://") {
+        ("http", after)
+    } else if let Some(after) = trimmed.strip_prefix("https://") {
+        ("https", after)
+    } else {
+        return Err(AppError::Validation(
+            "URL preview harus menggunakan http:// atau https://".into(),
+        ));
+    };
+
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("").trim();
+
+    if authority.is_empty() {
+        return Err(AppError::Validation("Host preview kosong".into()));
+    }
+
+    let default_port = if scheme == "https" { 443 } else { 80 };
+    let (host, port) = if let Some((h, p_str)) = authority.split_once(':') {
+        let parsed_port = p_str
+            .parse::<u16>()
+            .map_err(|_| AppError::Validation(format!("Port preview tidak valid: {}", p_str)))?;
+        if parsed_port == 0 {
+            return Err(AppError::Validation("Port preview tidak boleh 0".into()));
+        }
+        (h.to_ascii_lowercase(), parsed_port)
+    } else {
+        (authority.to_ascii_lowercase(), default_port)
+    };
+
+    if host != "localhost" && host != "127.0.0.1" {
+        return Err(AppError::Validation(format!(
+            "Host preview tidak diizinkan: {}",
+            host
+        )));
+    }
+
+    Ok((host, port))
+}
+
+fn check_localhost_reachable(raw_url: &str) -> AppResult<bool> {
+    let (host, port) = parse_localhost_target(raw_url)?;
+    let timeout = Duration::from_millis(350);
+
+    let v4_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+    if TcpStream::connect_timeout(&v4_addr, timeout).is_ok() {
+        return Ok(true);
+    }
+
+    if host == "localhost" {
+        let v6_addr = SocketAddr::new(Ipv6Addr::LOCALHOST.into(), port);
+        if TcpStream::connect_timeout(&v6_addr, timeout).is_ok() {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+#[tauri::command]
+fn preview_check_url(url: String) -> AppResult<bool> {
+    check_localhost_reachable(&url)
+}
+
 fn update_window_title(window: &Window, folder_name: Option<&str>) {
     let title = match folder_name {
         Some(name) if !name.is_empty() => format!("{} - glzr", name),
@@ -583,7 +650,8 @@ pub fn run() {
             session_load,
             session_save,
             reveal_in_file_manager,
-            open_external
+            open_external,
+            preview_check_url
         ]);
 
     if let Err(err) = builder.run(tauri::generate_context!()) {
@@ -594,6 +662,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
     use tempfile::TempDir;
 
     #[test]
@@ -604,6 +673,29 @@ mod tests {
 
         let resolved = resolve_cli_folder_arg(args);
         assert_eq!(resolved, Some(PathBuf::from(dir_str)));
+        Ok(())
+    }
+
+    #[test]
+    fn validates_and_checks_localhost_reachability() -> AppResult<()> {
+        assert_eq!(
+            parse_localhost_target("http://localhost:5173/app?x=1")?,
+            ("localhost".to_string(), 5173)
+        );
+        assert_eq!(
+            parse_localhost_target("http://127.0.0.1:8080")?,
+            ("127.0.0.1".to_string(), 8080)
+        );
+        assert!(parse_localhost_target("https://example.com:8080").is_err());
+        assert!(parse_localhost_target("file:///etc/passwd").is_err());
+
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        let url = format!("http://localhost:{}/", port);
+        assert!(check_localhost_reachable(&url)?);
+
+        drop(listener);
+        assert!(!check_localhost_reachable(&url)?);
         Ok(())
     }
 }
