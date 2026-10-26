@@ -734,4 +734,21 @@ mod tests {
         assert_eq!(load_draft(&ws, &cache, Path::new("src/main.rs"))?, None);
         Ok(())
     }
+
+    #[test]
+    fn detects_large_file_and_disables_highlight() -> AppResult<()> {
+        let tmp = TempDir::new()?;
+        let ws = tmp.path().join("ws");
+        fs::create_dir_all(&ws)?;
+        let large_path = ws.join("big.log");
+        let f = File::create(&large_path)?;
+        f.set_len(6 * 1024 * 1024)?;
+        drop(f);
+
+        let read_dto = read_file(&ws, Path::new("big.log"))?;
+        assert!(read_dto.is_large_file);
+        assert!(read_dto.disable_highlight);
+        assert_eq!(read_dto.size_bytes, 6 * 1024 * 1024);
+        Ok(())
+    }
 }
