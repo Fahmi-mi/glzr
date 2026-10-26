@@ -385,6 +385,10 @@ export async function openExternal(target: string): Promise<void> {
   return callCommand<void>('open_external', { target });
 }
 
+export async function previewCheckUrl(url: string): Promise<boolean> {
+  return callCommand<boolean>('preview_check_url', { url });
+}
+
 export async function onBackendEvent<K extends keyof BackendEventMap>(
   event: K,
   handler: (payload: BackendEventMap[K]) => void
