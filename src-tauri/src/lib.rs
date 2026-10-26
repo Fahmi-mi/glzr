@@ -3,6 +3,7 @@ pub mod fs;
 pub mod git;
 pub mod pty;
 pub mod search;
+pub mod settings;
 pub mod state;
 
 use crate::error::{AppError, AppResult};
@@ -16,6 +17,9 @@ use crate::search::{
     cancel_active_search, consume_rg_stream, spawn_rg_process, ActiveSearchHandle, SearchDoneEvent,
     SearchErrorEvent, SearchQueryOptions, SearchResultsEvent, DEFAULT_MAX_SEARCH_RESULTS,
     DEFAULT_SNIPPET_MAX_CHARS,
+};
+use crate::settings::{
+    load_settings_from_path, save_settings_to_path, AppSettings, SettingsLoadDto,
 };
 use crate::state::{AppState, ProjectStateDto, SessionLoadDto, XdgPaths};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
@@ -423,6 +427,16 @@ fn session_save(raw_json: String, state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command]
+fn settings_load(state: State<'_, AppState>) -> AppResult<SettingsLoadDto> {
+    load_settings_from_path(&state.xdg.settings_file_path())
+}
+
+#[tauri::command]
+fn settings_save(settings: AppSettings, state: State<'_, AppState>) -> AppResult<()> {
+    save_settings_to_path(&state.xdg.settings_file_path(), &settings)
+}
+
+#[tauri::command]
 fn reveal_in_file_manager(path: String) -> AppResult<()> {
     let target = Path::new(&path);
     if !target.exists() {
@@ -649,6 +663,8 @@ pub fn run() {
             pty_kill,
             session_load,
             session_save,
+            settings_load,
+            settings_save,
             reveal_in_file_manager,
             open_external,
             preview_check_url
