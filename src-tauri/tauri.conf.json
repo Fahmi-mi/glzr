@@ -40,5 +40,17 @@
         "depends": ["git"]
       }
     }
+  },
+  "plugins": {
+    "cli": {
+      "description": "glzr - terminal-first workspace for Linux",
+      "args": [
+        {
+          "name": "folder",
+          "index": 1,
+          "description": "Folder path to open"
+        }
+      ]
+    }
   }
 }
