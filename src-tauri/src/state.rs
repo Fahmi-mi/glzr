@@ -96,6 +96,10 @@ impl XdgPaths {
     pub fn session_backup_path(&self) -> PathBuf {
         self.data_dir.join("session.json.bak")
     }
+
+    pub fn settings_file_path(&self) -> PathBuf {
+        self.config_dir.join("settings.toml")
+    }
 }
 
 #[derive(Debug, Default)]

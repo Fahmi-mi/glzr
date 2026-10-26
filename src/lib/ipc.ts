@@ -122,6 +122,128 @@ export interface SessionLoadDto {
   backedUpCorrupt: boolean;
 }
 
+export interface AppearanceSettingsDto {
+  theme: 'dark' | 'light';
+  fontFamily: 'system-mono' | 'jetbrains-mono-nerd';
+  fontSize: number;
+}
+
+export interface EditorSettingsDto {
+  tabSize: number;
+  insertSpaces: boolean;
+  wordWrap: boolean;
+  lineNumbers: boolean;
+  largeFileLimitMb: number;
+  longLineLimit: number;
+  draftAutosaveSeconds: number;
+}
+
+export interface TerminalSettingsDto {
+  shell: string;
+  shellArgs: string[];
+  extraEnv: Record<string, string>;
+  scrollback: number;
+  cursorStyle: string;
+  confirmPasteOverKb: number;
+}
+
+export interface KeybindingsSettingsDto {
+  commandPalette: string;
+  quickOpen: string;
+  sidebarFiles: string;
+  sidebarGit: string;
+  sidebarSearch: string;
+  newTerminal: string;
+  closeTab: string;
+  splitRight: string;
+  splitDown: string;
+  closePane: string;
+  maximizePane: string;
+  terminalFind: string;
+}
+
+export interface AppSettingsDto {
+  appearance: AppearanceSettingsDto;
+  editor: EditorSettingsDto;
+  terminal: TerminalSettingsDto;
+  files: { ignore: string[] };
+  git: { commandTimeoutSeconds: number; diffSizeLimitMb: number };
+  search: { maxResults: number; snippetMaxChars: number; debounceMs: number };
+  preview: { allowedHosts: string[]; autoDetectPort: boolean };
+  session: { restore: boolean; recentFoldersLimit: number };
+  logging: { level: string };
+  keybindings: KeybindingsSettingsDto;
+}
+
+export interface SettingsLoadDto {
+  settings: AppSettingsDto;
+  warnings: string[];
+}
+
+export function createDefaultSettings(): AppSettingsDto {
+  return {
+    appearance: {
+      theme: 'dark',
+      fontFamily: 'system-mono',
+      fontSize: 14
+    },
+    editor: {
+      tabSize: 4,
+      insertSpaces: true,
+      wordWrap: false,
+      lineNumbers: true,
+      largeFileLimitMb: 5,
+      longLineLimit: 10000,
+      draftAutosaveSeconds: 5
+    },
+    terminal: {
+      shell: '',
+      shellArgs: ['-l', '-i'],
+      extraEnv: {},
+      scrollback: 5000,
+      cursorStyle: 'block',
+      confirmPasteOverKb: 64
+    },
+    files: {
+      ignore: ['.git', 'node_modules', 'target']
+    },
+    git: {
+      commandTimeoutSeconds: 30,
+      diffSizeLimitMb: 2
+    },
+    search: {
+      maxResults: 2000,
+      snippetMaxChars: 300,
+      debounceMs: 200
+    },
+    preview: {
+      allowedHosts: ['localhost', '127.0.0.1'],
+      autoDetectPort: false
+    },
+    session: {
+      restore: true,
+      recentFoldersLimit: 5
+    },
+    logging: {
+      level: 'info'
+    },
+    keybindings: {
+      commandPalette: 'Alt+P',
+      quickOpen: 'Alt+O',
+      sidebarFiles: 'Alt+E',
+      sidebarGit: 'Alt+V',
+      sidebarSearch: 'Alt+G',
+      newTerminal: 'Alt+T',
+      closeTab: 'Alt+W',
+      splitRight: 'Alt+R',
+      splitDown: 'Alt+J',
+      closePane: 'Alt+Q',
+      maximizePane: 'Alt+M',
+      terminalFind: 'Alt+S'
+    }
+  };
+}
+
 export interface SearchMatchDto {
   relPath: string;
   line: number;
@@ -375,6 +497,14 @@ export async function sessionLoad(): Promise<SessionLoadDto> {
 
 export async function sessionSave(rawJson: string): Promise<void> {
   return callCommand<void>('session_save', { rawJson });
+}
+
+export async function settingsLoad(): Promise<SettingsLoadDto> {
+  return callCommand<SettingsLoadDto>('settings_load');
+}
+
+export async function settingsSave(settings: AppSettingsDto): Promise<void> {
+  return callCommand<void>('settings_save', { settings });
 }
 
 export async function revealInFileManager(path: string): Promise<void> {
