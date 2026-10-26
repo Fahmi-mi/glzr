@@ -576,12 +576,15 @@ where
 
 #[cfg(target_os = "linux")]
 pub fn configure_linux_webkit_environment() {
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        let has_nvidia = Path::new("/dev/nvidia0").exists()
-            || Path::new("/proc/driver/nvidia").exists()
-            || Path::new("/sys/module/nvidia").exists();
-        if has_nvidia {
+    let has_nvidia = Path::new("/dev/nvidia0").exists()
+        || Path::new("/proc/driver/nvidia").exists()
+        || Path::new("/sys/module/nvidia").exists();
+    if has_nvidia {
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
     }
 }
@@ -738,6 +741,10 @@ mod tests {
         if Path::new("/dev/nvidia0").exists() || Path::new("/proc/driver/nvidia").exists() {
             assert_eq!(
                 std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").as_deref(),
+                Ok("1")
+            );
+            assert_eq!(
+                std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").as_deref(),
                 Ok("1")
             );
         }

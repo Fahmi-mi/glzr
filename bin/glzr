@@ -1,0 +1,25 @@
+#!/bin/bash
+# Wrapper launcher for glzr on Linux desktop (handles X11/Wayland hybrid GPU environments)
+set -e
+
+if [ -z "$WEBKIT_DISABLE_DMABUF_RENDERER" ]; then
+  export WEBKIT_DISABLE_DMABUF_RENDERER=1
+fi
+
+if [ -z "$WEBKIT_DISABLE_COMPOSITING_MODE" ]; then
+  export WEBKIT_DISABLE_COMPOSITING_MODE=1
+fi
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="$ROOT_DIR/src-tauri/target/release/glzr"
+
+if [ ! -f "$BIN" ]; then
+  BIN="$ROOT_DIR/src-tauri/target/debug/glzr"
+fi
+
+if [ ! -f "$BIN" ]; then
+  echo "Error: glzr binary not found. Please run 'npm run tauri build' or 'cargo build --release' first." >&2
+  exit 1
+fi
+
+exec "$BIN" "$@"
