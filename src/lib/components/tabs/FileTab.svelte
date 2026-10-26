@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import { EditorSelection, EditorState, Compartment } from '@codemirror/state';
   import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view';
@@ -26,6 +26,8 @@
     fsReadFile,
     fsSaveDraft,
     fsWriteFile,
+    normalizeTabPath,
+    onBackendEvent,
     openExternal,
     type AppErrorPayload,
     type DraftDto,
@@ -55,12 +57,14 @@
   let editorHost = $state<HTMLDivElement | null>(null);
   let fileData = $state<FileReadDto | null>(null);
   let pendingDraft = $state<DraftDto | null>(null);
+  let externalConflict = $state<FileReadDto | null>(null);
   let loading = $state(true);
   let errorMsg = $state<string | null>(null);
   let saveErrorMsg = $state<string | null>(null);
   let svgMode = $state<'preview' | 'code'>('preview');
   let isDirty = $state(false);
   let savedContent = $state('');
+  let lastKnownMtimeMs = $state(0);
   let cursorLine = $state(1);
   let cursorCol = $state(1);
 
@@ -69,6 +73,7 @@
   const readOnlyCompartment = new Compartment();
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   let activeLoadToken = 0;
+  let unlistenFsChanged: (() => void) | null = null;
 
   const glzrHighlightStyle = HighlightStyle.define([
     {
@@ -220,8 +225,10 @@
     saveErrorMsg = null;
     const content = editorView.state.doc.toString();
     try {
-      await fsWriteFile(path, content, fileData.encoding, fileData.lineEnding);
+      const writeRes = await fsWriteFile(path, content, fileData.encoding, fileData.lineEnding);
+      lastKnownMtimeMs = writeRes.mtimeMs;
       savedContent = content;
+      externalConflict = null;
       isDirty = false;
       onDirtyChange?.(false);
       clearDraftTimer();
@@ -355,6 +362,8 @@
       if (token !== activeLoadToken) return;
       fileData = data;
       savedContent = data.content ?? '';
+      lastKnownMtimeMs = data.mtimeMs;
+      externalConflict = null;
       svgMode = 'preview';
       cursorLine = 1;
       cursorCol = 1;
@@ -406,6 +415,52 @@
     }
   }
 
+  function applyExternalReload(latest: FileReadDto) {
+    fileData = latest;
+    savedContent = latest.content ?? '';
+    lastKnownMtimeMs = latest.mtimeMs;
+    externalConflict = null;
+    isDirty = false;
+    onDirtyChange?.(false);
+    clearDraftTimer();
+    void fsClearDraft(path).catch(() => {});
+
+    if (editorView && latest.content !== null) {
+      const prevHead = editorView.state.selection.main.head;
+      const clampedHead = Math.min(prevHead, latest.content.length);
+      editorView.dispatch({
+        changes: {
+          from: 0,
+          to: editorView.state.doc.length,
+          insert: latest.content
+        },
+        selection: EditorSelection.cursor(clampedHead)
+      });
+    }
+  }
+
+  onMount(async () => {
+    unlistenFsChanged = await onBackendEvent('fs:changed', async (payload) => {
+      const myNorm = normalizeTabPath(path);
+      const matched = payload.paths.some((p) => normalizeTabPath(p) === myNorm);
+      if (!matched || loading) return;
+
+      try {
+        const latest = await fsReadFile(path);
+        if (latest.mtimeMs <= lastKnownMtimeMs || latest.content === savedContent) {
+          return;
+        }
+        if (!isDirty) {
+          applyExternalReload(latest);
+        } else {
+          externalConflict = latest;
+        }
+      } catch {
+        // File may have been deleted or moved
+      }
+    });
+  });
+
   $effect(() => {
     void loadFile(path);
   });
@@ -432,6 +487,7 @@
 
   onDestroy(() => {
     activeLoadToken++;
+    unlistenFsChanged?.();
     destroyEditor();
   });
 </script>
@@ -477,6 +533,23 @@
     {#if fileData.disableHighlight && (fileData.kind === 'text' || fileData.kind === 'svg')}
       <div class="notice-bar">
         <span>Syntax highlight dinonaktifkan untuk menjaga performa file besar.</span>
+      </div>
+    {/if}
+
+    {#if externalConflict}
+      <div class="notice-bar warning">
+        <span>File ini berubah di disk dari luar editor.</span>
+        <div class="notice-actions">
+          <button class="primary small-btn" onclick={() => void save()}>Simpan milikku</button>
+          <button
+            class="small-btn"
+            onclick={() => {
+              if (externalConflict) applyExternalReload(externalConflict);
+            }}
+          >
+            Muat ulang
+          </button>
+        </div>
       </div>
     {/if}
 
