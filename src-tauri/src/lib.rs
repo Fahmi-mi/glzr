@@ -575,7 +575,25 @@ where
 }
 
 #[cfg(target_os = "linux")]
+fn sanitize_fontconfig_cache() {
+    if let Ok(home) = std::env::var("HOME") {
+        let fc_dir = Path::new(&home).join(".cache/fontconfig");
+        if fc_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&fc_dir) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+                        let _ = std::fs::remove_file(entry.path());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 pub fn configure_linux_webkit_environment() {
+    sanitize_fontconfig_cache();
+
     let has_nvidia = Path::new("/dev/nvidia0").exists()
         || Path::new("/proc/driver/nvidia").exists()
         || Path::new("/sys/module/nvidia").exists();

@@ -65,3 +65,9 @@ Daftar masalah yang diketahui, hasil validasi spike teknis, serta mitigasi opera
 - **Status:** Beroperasi via terminal
 - **Gejala:** Operasi push/pull melalui panel GUI meminta input username/password atau passphrase SSH dan berisiko hang jika tidak ada prompt TTY.
 - **Solusi:** Backend git menyetel `GIT_TERMINAL_PROMPT=0`. Untuk repo yang membutuhkan autentikasi interaktif atau SSH passphrase baru, jalankan push/pull melalui tab terminal glzr.
+
+### 9. Window blank akibat cache fontconfig Linux terkorupsi
+
+- **Status:** Selesai (`src-tauri/src/lib.rs`)
+- **Gejala:** Jendela aplikasi terbuka blank dan WebKitWebProcess memakan 50-100% CPU saat inisialisasi font.
+- **Solusi:** glzr secara otomatis mendeteksi dan membersihkan symlink duplikat pada direktori `~/.cache/fontconfig` saat boot, atau pengguna dapat meregenerasi cache font sistem dengan perintah `fc-cache -f`.
