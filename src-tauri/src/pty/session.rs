@@ -233,10 +233,20 @@ fn run_batched_reader(
         }
 
         batch.push_str(&first);
-        while batch.len() < BATCH_MAX_BYTES {
-            match raw_rx.recv_timeout(poll_timeout) {
-                Ok(more) => batch.push_str(&more),
-                Err(_) => break,
+
+        if batch.len() >= 1024 {
+            while batch.len() < BATCH_MAX_BYTES {
+                match raw_rx.recv_timeout(poll_timeout) {
+                    Ok(more) => batch.push_str(&more),
+                    Err(_) => break,
+                }
+            }
+        } else {
+            while batch.len() < BATCH_MAX_BYTES {
+                match raw_rx.try_recv() {
+                    Ok(more) => batch.push_str(&more),
+                    Err(_) => break,
+                }
             }
         }
 

@@ -6,7 +6,6 @@
   import { SearchAddon } from '@xterm/addon-search';
   import { Unicode11Addon } from '@xterm/addon-unicode11';
   import { WebLinksAddon } from '@xterm/addon-web-links';
-  import { WebglAddon } from '@xterm/addon-webgl';
   import { CanvasAddon } from '@xterm/addon-canvas';
   import Globe from '@lucide/svelte/icons/globe';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -179,29 +178,10 @@
 
     instance.open(hostEl);
 
-    let rendererLoaded = false;
     try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-        try {
-          instance.loadAddon(new CanvasAddon());
-        } catch {
-          // Fallback to DOM renderer
-        }
-      });
-      instance.loadAddon(webgl);
-      rendererLoaded = true;
+      instance.loadAddon(new CanvasAddon());
     } catch {
-      // WebGL unavailable on current display stack
-    }
-
-    if (!rendererLoaded) {
-      try {
-        instance.loadAddon(new CanvasAddon());
-      } catch {
-        // Fallback to DOM renderer
-      }
+      // Fallback to default DOM renderer
     }
 
     instance.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
@@ -278,7 +258,10 @@
     unlistenOutput = await onBackendEvent('pty:output', (payload) => {
       if (payload.sessionId === sessionId && term) {
         term.write(payload.data);
-        if (payload.data.length <= 2048) {
+        if (
+          payload.data.length <= 2048 &&
+          (payload.data.includes('localhost') || payload.data.includes('127.0.0.1'))
+        ) {
           const found = extractLocalhostUrl(payload.data);
           if (found) {
             detectedLocalUrl = found;
