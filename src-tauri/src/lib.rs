@@ -2,17 +2,25 @@ pub mod error;
 pub mod fs;
 pub mod git;
 pub mod pty;
+pub mod search;
 pub mod state;
 
 use crate::error::{AppError, AppResult};
 use crate::fs::detect::{EncodingKind, LineEnding};
+use crate::fs::watcher::{FsChangedEvent, FsWatchErrorEvent, WorkspaceWatcher};
 use crate::fs::{DirEntryDto, DraftDto, FileReadDto, WriteResultDto, DEFAULT_IGNORE_NAMES};
 use crate::git::hunk::DiffHunk;
 use crate::git::{GitBranchesDto, GitDiffDto, GitStatusDto};
 use crate::pty::{PtyExitEvent, PtyOutputEvent, PtySpawnDto};
+use crate::search::{
+    cancel_active_search, consume_rg_stream, spawn_rg_process, ActiveSearchHandle, SearchDoneEvent,
+    SearchErrorEvent, SearchQueryOptions, SearchResultsEvent, DEFAULT_MAX_SEARCH_RESULTS,
+    DEFAULT_SNIPPET_MAX_CHARS,
+};
 use crate::state::{AppState, ProjectStateDto, SessionLoadDto, XdgPaths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::thread;
 use tauri::{AppHandle, Emitter, Manager, State, Window, WindowEvent};
 
@@ -117,6 +125,127 @@ fn fs_load_draft(path: String, state: State<'_, AppState>) -> AppResult<Option<D
 fn fs_clear_draft(path: String, state: State<'_, AppState>) -> AppResult<()> {
     let root = state.active_folder_path()?;
     fs::clear_draft(&root, &state.xdg.cache_dir, Path::new(&path))
+}
+
+#[tauri::command]
+fn fs_watch(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    state.stop_watcher();
+
+    let app_for_change = app.clone();
+    let app_for_err = app;
+
+    let watcher = WorkspaceWatcher::start(
+        &root,
+        move |paths| {
+            let _ = app_for_change.emit("fs:changed", FsChangedEvent { paths });
+        },
+        move |message| {
+            let _ = app_for_err.emit("fs:watch-error", FsWatchErrorEvent { message });
+        },
+    )?;
+
+    let mut guard = state
+        .fs_watcher
+        .lock()
+        .map_err(|_| AppError::LockPoisoned)?;
+    *guard = Some(watcher);
+    Ok(())
+}
+
+#[tauri::command]
+fn fs_unwatch(state: State<'_, AppState>) -> AppResult<()> {
+    state.stop_watcher();
+    Ok(())
+}
+
+#[tauri::command]
+fn search_start(
+    query_id: String,
+    pattern: String,
+    case_sensitive: bool,
+    regex: bool,
+    glob: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    state.cancel_search();
+
+    let opts = SearchQueryOptions {
+        query_id: query_id.clone(),
+        pattern,
+        case_sensitive,
+        regex,
+        glob,
+    };
+
+    let child = spawn_rg_process(&root, &opts)?;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let pid = Some(child.id());
+
+    {
+        let mut guard = state
+            .active_search
+            .lock()
+            .map_err(|_| AppError::LockPoisoned)?;
+        *guard = Some(ActiveSearchHandle {
+            query_id: query_id.clone(),
+            cancelled: Arc::clone(&cancelled),
+            pid,
+        });
+    }
+
+    thread::spawn(move || {
+        let qid_batch = query_id.clone();
+        let qid_done = query_id.clone();
+        let qid_err = query_id;
+        let app_batch = app.clone();
+        let app_done = app.clone();
+        let app_err = app;
+
+        consume_rg_stream(
+            child,
+            cancelled,
+            DEFAULT_MAX_SEARCH_RESULTS,
+            DEFAULT_SNIPPET_MAX_CHARS,
+            move |items| {
+                let _ = app_batch.emit(
+                    "search:results",
+                    SearchResultsEvent {
+                        query_id: qid_batch.clone(),
+                        items,
+                    },
+                );
+            },
+            move |truncated| {
+                let _ = app_done.emit(
+                    "search:done",
+                    SearchDoneEvent {
+                        query_id: qid_done,
+                        truncated,
+                    },
+                );
+            },
+            move |message| {
+                let _ = app_err.emit(
+                    "search:error",
+                    SearchErrorEvent {
+                        query_id: qid_err,
+                        message,
+                    },
+                );
+            },
+        );
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn search_cancel(state: State<'_, AppState>) -> AppResult<()> {
+    cancel_active_search(&state.active_search);
+    Ok(())
 }
 
 #[tauri::command]
@@ -407,6 +536,8 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::Destroyed = event {
                 if let Some(state) = window.try_state::<AppState>() {
+                    state.stop_watcher();
+                    state.cancel_search();
                     state.kill_all_pty_sessions();
                 }
             }
@@ -427,6 +558,10 @@ pub fn run() {
             fs_save_draft,
             fs_load_draft,
             fs_clear_draft,
+            fs_watch,
+            fs_unwatch,
+            search_start,
+            search_cancel,
             git_status,
             git_diff,
             git_hunks,
