@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   rust:
@@ -53,3 +53,19 @@ jobs:
         run: npm run lint
       - name: Run unit tests
         run: npm test
+
+  security:
+    name: Security (npm audit, cargo audit)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Run npm audit
+        run: npm audit --omit=dev
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Run cargo audit
+        run: cargo audit
+        working-directory: src-tauri
