@@ -24,6 +24,7 @@
   import {
     clampTerminalFontSize,
     extractLocalhostUrl,
+    getTerminalTheme,
     isLargePaste,
     resolveTerminalKey
   } from '$lib/terminal';
@@ -31,11 +32,19 @@
   interface Props {
     sessionId: string;
     visible?: boolean;
+    theme?: 'dark' | 'light';
     onOpenLocalhost?: (url: string) => void;
   }
 
-  let { sessionId, visible = true, onOpenLocalhost }: Props = $props();
+  let { sessionId, visible = true, theme = 'dark', onOpenLocalhost }: Props = $props();
 
+  function generateSessionToken(): string {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  // svelte-ignore state_referenced_locally
+  let activeSessionId = $state(`${sessionId}:${generateSessionToken()}`);
+  let restarting = $state(false);
   let hostEl = $state<HTMLDivElement | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let searchOpen = $state(false);
@@ -64,7 +73,7 @@
       if (!visible || !term || !fitAddon) return;
       try {
         fitAddon.fit();
-        void ptyResize(sessionId, term.cols, term.rows).catch(() => {});
+        void ptyResize(activeSessionId, term.cols, term.rows).catch(() => {});
       } catch {
         // Ignore transient layout state
       }
@@ -107,7 +116,7 @@
     exitCode = null;
     errorMsg = null;
     try {
-      await ptySpawn(sessionId, term.cols, term.rows);
+      await ptySpawn(activeSessionId, term.cols, term.rows);
       term.focus();
     } catch (err) {
       const normalized = err as AppErrorPayload;
@@ -116,10 +125,40 @@
   }
 
   export async function restartSession() {
-    if (!term) return;
-    term.clear();
-    await spawnShell();
+    if (!term || restarting) return;
+    restarting = true;
+    try {
+      const oldSessionId = activeSessionId;
+      activeSessionId = `${sessionId}:${generateSessionToken()}`;
+      void ptyKill(oldSessionId).catch(() => {});
+      exited = false;
+      exitCode = null;
+      errorMsg = null;
+      term.reset();
+      try {
+        fitAddon?.fit();
+      } catch {
+        // Ignore transient fit error
+      }
+      await spawnShell();
+    } finally {
+      restarting = false;
+    }
   }
+
+  $effect(() => {
+    if (!activeSessionId.startsWith(`${sessionId}:`)) {
+      const oldSessionId = activeSessionId;
+      activeSessionId = `${sessionId}:${generateSessionToken()}`;
+      void ptyKill(oldSessionId).catch(() => {});
+    }
+  });
+
+  $effect(() => {
+    if (term) {
+      term.options.theme = getTerminalTheme(theme);
+    }
+  });
 
   onMount(async () => {
     if (!hostEl) return;
@@ -134,28 +173,7 @@
       fontSize,
       lineHeight: 1.35,
       smoothScrollDuration: 0,
-      theme: {
-        background: '#141517',
-        foreground: '#e6e8eb',
-        cursor: '#5b9cf5',
-        selectionBackground: 'rgba(91, 156, 245, 0.24)',
-        black: '#1c1e22',
-        red: '#e06c75',
-        green: '#4ec994',
-        yellow: '#e5a54b',
-        blue: '#5b9cf5',
-        magenta: '#c678dd',
-        cyan: '#56b6c2',
-        white: '#e6e8eb',
-        brightBlack: '#525761',
-        brightRed: '#e06c75',
-        brightGreen: '#4ec994',
-        brightYellow: '#e5a54b',
-        brightBlue: '#5b9cf5',
-        brightMagenta: '#c678dd',
-        brightCyan: '#56b6c2',
-        brightWhite: '#ffffff'
-      }
+      theme: getTerminalTheme(theme)
     });
 
     const fit = new FitAddon();
@@ -241,7 +259,7 @@
 
     instance.onData((data) => {
       if (!exited) {
-        void ptyWrite(sessionId, data).catch(() => {});
+        void ptyWrite(activeSessionId, data).catch(() => {});
       }
     });
 
@@ -256,7 +274,7 @@
     }
 
     unlistenOutput = await onBackendEvent('pty:output', (payload) => {
-      if (payload.sessionId === sessionId && term) {
+      if (payload.sessionId === activeSessionId && term) {
         term.write(payload.data);
         if (
           payload.data.length <= 2048 &&
@@ -271,7 +289,7 @@
     });
 
     unlistenExit = await onBackendEvent('pty:exit', (payload) => {
-      if (payload.sessionId === sessionId) {
+      if (payload.sessionId === activeSessionId) {
         exited = true;
         exitCode = payload.code;
       }
@@ -302,7 +320,7 @@
     resizeObserver?.disconnect();
     unlistenOutput?.();
     unlistenExit?.();
-    void ptyKill(sessionId).catch(() => {});
+    void ptyKill(activeSessionId).catch(() => {});
     term?.dispose();
     term = null;
   });
@@ -393,7 +411,7 @@
   {#if exited}
     <div class="terminal-banner exited">
       <span>Process completed{exitCode !== null ? ` (exit code ${exitCode})` : ''}.</span>
-      <button class="primary small-btn" onclick={restartSession}>
+      <button class="primary small-btn" disabled={restarting} onclick={restartSession}>
         <RotateCcw size={12} strokeWidth={2} />
         <span>Restart</span>
       </button>

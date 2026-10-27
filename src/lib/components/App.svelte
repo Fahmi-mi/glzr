@@ -1,11 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import Files from '@lucide/svelte/icons/files';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import Moon from '@lucide/svelte/icons/moon';
   import Plus from '@lucide/svelte/icons/plus';
-  import Search from '@lucide/svelte/icons/search';
   import Sun from '@lucide/svelte/icons/sun';
   import X from '@lucide/svelte/icons/x';
   import {
@@ -37,6 +35,7 @@
     findDirectionalNeighborPane,
     findPaneById,
     getFirstPaneId,
+    getNextWorkspaceNumber,
     listAllPanes,
     migrateAndSanitizeSession,
     moveTabBetweenPanes,
@@ -76,8 +75,18 @@
 
   let focusedPaneByWs = $state<Record<string, string>>({});
   let maximizedPaneByWs = $state<Record<string, string | null>>({});
-  let renamingWsId = $state<string | null>(null);
-  let renameInputText = $state('');
+  let workspaceModal = $state<{
+    open: boolean;
+    mode: 'create' | 'rename';
+    targetWsId?: string;
+    nameInput: string;
+    defaultNum: number;
+  }>({
+    open: false,
+    mode: 'create',
+    nameInput: '',
+    defaultNum: 1
+  });
 
   let dirtyTabs = $state<Record<string, boolean>>({});
   let tabMetaMap = $state<Record<string, FileTabMeta>>({});
@@ -327,7 +336,14 @@
         label: 'New workspace',
         category: 'Action',
         keywords: 'workspace add',
-        run: () => handleAddWorkspace()
+        run: () => promptNewWorkspace()
+      },
+      {
+        id: 'act:rename-workspace',
+        label: 'Rename active workspace',
+        category: 'Action',
+        keywords: 'workspace rename edit',
+        run: () => promptRenameWorkspace(session.activeWorkspaceId)
       },
       {
         id: 'act:close-workspace',
@@ -560,12 +576,57 @@
     focusedPaneByWs[activeWorkspace.id] = paneId;
   }
 
-  function handleAddWorkspace() {
-    const num = session.workspaces.length + 1;
-    const wsId = nextId('ws');
-    const newWs = createInitialWorkspace(wsId, `${num} Workspace`, projectState.activeFolder ?? '');
-    session.workspaces.push(newWs);
-    session.activeWorkspaceId = wsId;
+  function promptNewWorkspace() {
+    const nextNum = getNextWorkspaceNumber(session.workspaces);
+    workspaceModal = {
+      open: true,
+      mode: 'create',
+      nameInput: String(nextNum),
+      defaultNum: nextNum
+    };
+  }
+
+  function promptRenameWorkspace(wsId: string) {
+    const target = session.workspaces.find((w) => w.id === wsId);
+    if (!target) return;
+    workspaceModal = {
+      open: true,
+      mode: 'rename',
+      targetWsId: wsId,
+      nameInput: target.name,
+      defaultNum: 1
+    };
+  }
+
+  function submitWorkspaceModal() {
+    if (!workspaceModal.open) return;
+    const entered = workspaceModal.nameInput.trim();
+
+    if (workspaceModal.mode === 'create') {
+      const finalName = entered || String(workspaceModal.defaultNum);
+      const wsId = nextId('ws');
+      const newWs = createInitialWorkspace(wsId, finalName, projectState.activeFolder ?? '');
+      session.workspaces.push(newWs);
+      session.activeWorkspaceId = wsId;
+    } else if (workspaceModal.mode === 'rename' && workspaceModal.targetWsId) {
+      const target = session.workspaces.find((w) => w.id === workspaceModal.targetWsId);
+      if (target && entered) {
+        target.name = entered;
+      }
+    }
+
+    workspaceModal.open = false;
+  }
+
+  function closeWorkspaceModal() {
+    workspaceModal.open = false;
+  }
+
+  function focusAndSelect(el: HTMLInputElement) {
+    requestAnimationFrame(() => {
+      el.focus();
+      el.select();
+    });
   }
 
   function handleCloseWorkspace(wsId: string) {
@@ -579,17 +640,24 @@
     }
   }
 
-  function commitWorkspaceRename(wsId: string) {
-    const trimmed = renameInputText.trim();
-    const target = session.workspaces.find((w) => w.id === wsId);
-    if (target && trimmed) {
-      target.name = trimmed;
-    }
-    renamingWsId = null;
-  }
-
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (!projectState.activeFolder || !activeWorkspace) return;
+
+    if (workspaceModal.open) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeWorkspaceModal();
+      }
+      return;
+    }
+
+    if (pendingClose) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        pendingClose = null;
+      }
+      return;
+    }
 
     const terminalFocused = activeTab?.kind === 'terminal';
     const action = resolveGlobalShortcut(
@@ -1038,30 +1106,15 @@
       <div class="workspace-list">
         {#each session.workspaces as ws (ws.id)}
           <div class="ws-pill" class:active={ws.id === session.activeWorkspaceId}>
-            {#if renamingWsId === ws.id}
-              <input
-                bind:value={renameInputText}
-                type="text"
-                class="ws-rename-input"
-                onblur={() => commitWorkspaceRename(ws.id)}
-                onkeydown={(e) => {
-                  if (e.key === 'Enter') commitWorkspaceRename(ws.id);
-                  if (e.key === 'Escape') renamingWsId = null;
-                }}
-              />
-            {:else}
-              <button
-                class="workspace-item"
-                class:active={ws.id === session.activeWorkspaceId}
-                onclick={() => (session.activeWorkspaceId = ws.id)}
-                ondblclick={() => {
-                  renamingWsId = ws.id;
-                  renameInputText = ws.name;
-                }}
-              >
-                {ws.name}
-              </button>
-            {/if}
+            <button
+              class="workspace-item"
+              class:active={ws.id === session.activeWorkspaceId}
+              onclick={() => (session.activeWorkspaceId = ws.id)}
+              ondblclick={() => promptRenameWorkspace(ws.id)}
+              title="Workspace {ws.name} (Double-click to rename)"
+            >
+              {ws.name}
+            </button>
             {#if session.workspaces.length > 1}
               <button
                 class="ws-close-btn"
@@ -1081,39 +1134,12 @@
           class="icon-btn"
           title="New workspace"
           aria-label="New workspace"
-          onclick={handleAddWorkspace}
+          onclick={promptNewWorkspace}
         >
           <Plus size={14} strokeWidth={2} />
         </button>
       </div>
       <div class="workspace-actions">
-        <button
-          class="folder-switch"
-          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'files'}
-          title="File Tree (Alt+E)"
-          onclick={() => toggleSidebarPanel('files')}
-        >
-          <Files size={14} strokeWidth={2} />
-          <span>Files</span>
-        </button>
-        <button
-          class="folder-switch"
-          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'git'}
-          title="Git Panel (Alt+V)"
-          onclick={() => toggleSidebarPanel('git')}
-        >
-          <GitBranch size={14} strokeWidth={2} />
-          <span>Git</span>
-        </button>
-        <button
-          class="folder-switch"
-          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'search'}
-          title="Search in Project (Alt+G)"
-          onclick={() => toggleSidebarPanel('search')}
-        >
-          <Search size={14} strokeWidth={2} />
-          <span>Search</span>
-        </button>
         <button
           class="folder-switch"
           title="Command Palette (Alt+P)"
@@ -1224,6 +1250,7 @@
           <div class="workspace-canvas" class:hidden-ws={!isWsActive}>
             <PaneNode
               node={renderNode}
+              theme={settings.appearance.theme}
               focusedPaneId={wsFocusedPane}
               maximizedPaneId={wsMaxPaneId}
               workspaceVisible={isWsActive}
@@ -1330,6 +1357,49 @@
             <button class="primary" onclick={handleConfirmSaveAndClose}>Save</button>
             <button class="danger" onclick={handleDiscardAndClose}>Discard</button>
             <button onclick={() => (pendingClose = null)}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if workspaceModal.open}
+      <div
+        class="modal-backdrop"
+        role="presentation"
+        onclick={(e) => {
+          if (e.target === e.currentTarget) closeWorkspaceModal();
+        }}
+      >
+        <div
+          class="confirm-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label={workspaceModal.mode === 'create' ? 'New Workspace' : 'Rename Workspace'}
+        >
+          <h2 class="confirm-title">
+            {workspaceModal.mode === 'create' ? 'New Workspace' : 'Rename Workspace'}
+          </h2>
+          <p class="muted">
+            {workspaceModal.mode === 'create'
+              ? 'Enter workspace name, or accept the sequential default number.'
+              : 'Enter a new name for this workspace.'}
+          </p>
+          <input
+            bind:value={workspaceModal.nameInput}
+            type="text"
+            class="ws-modal-input"
+            placeholder={String(workspaceModal.defaultNum)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') submitWorkspaceModal();
+              if (e.key === 'Escape') closeWorkspaceModal();
+            }}
+            use:focusAndSelect
+          />
+          <div class="confirm-actions">
+            <button onclick={closeWorkspaceModal}>Cancel</button>
+            <button class="primary" onclick={submitWorkspaceModal}>
+              {workspaceModal.mode === 'create' ? 'Create' : 'Rename'}
+            </button>
           </div>
         </div>
       </div>
@@ -1468,11 +1538,20 @@
     color: var(--ac);
   }
 
-  .ws-rename-input {
-    width: 96px;
-    height: 24px;
-    padding: 0 6px;
-    font-size: 12px;
+  .ws-modal-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    background: var(--sf);
+    border: 1px solid var(--bd);
+    border-radius: var(--radius-ctrl);
+    color: var(--tx);
+    font-size: 13px;
+  }
+
+  .ws-modal-input:focus {
+    outline: none;
+    border-color: var(--ac);
   }
 
   .ws-close-btn {
@@ -1495,11 +1574,6 @@
     padding: 4px 10px;
     border: none;
     color: var(--dm);
-  }
-
-  .folder-switch.active-toggle {
-    background: var(--acs);
-    color: var(--ac);
   }
 
   .icon-btn {

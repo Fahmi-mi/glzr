@@ -434,7 +434,9 @@
 
   .tree-scroll {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -443,6 +445,10 @@
 
   .tree-row {
     height: 28px;
+    min-height: 28px;
+    line-height: 28px;
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding-right: 4px;
     border-radius: var(--radius-ctrl);
     display: flex;
@@ -460,6 +466,8 @@
     flex: 1;
     min-width: 0;
     height: 26px;
+    line-height: 26px;
+    box-sizing: border-box;
     padding: 0 4px;
     border: none;
     background: transparent;
@@ -532,6 +540,8 @@
   }
 
   .empty-box {
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding: 16px 12px;
     font-size: 12px;
     color: var(--dm);

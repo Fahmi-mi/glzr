@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   closePane,
   findDirectionalNeighborPane,
+  getNextWorkspaceNumber,
   listAllPanes,
   migrateAndSanitizeSession,
   moveTabBetweenPanes,
@@ -146,5 +147,22 @@ describe('layout tree pure operations and session migration', () => {
     const sanitized = migrateAndSanitizeSession(legacySession, '/tmp/legacy');
     expect(sanitized.workspaces[0].name).toBe('1 Main');
     expect(sanitized.workspaces[1].name).toBe('2 Workspace');
+  });
+
+  it('determines the next sequential workspace number correctly', () => {
+    // Initial single workspace with default name
+    expect(getNextWorkspaceNumber([{ name: '1' }])).toBe(2);
+
+    // Sequential numerical workspaces
+    expect(getNextWorkspaceNumber([{ name: '1' }, { name: '2' }])).toBe(3);
+
+    // Renamed workspace without numeric digits
+    expect(getNextWorkspaceNumber([{ name: 'Backend' }])).toBe(2);
+
+    // Renamed workspace along with sequential numbered workspace
+    expect(getNextWorkspaceNumber([{ name: 'Backend' }, { name: '2' }])).toBe(3);
+
+    // Gapped workspace numbers
+    expect(getNextWorkspaceNumber([{ name: '1' }, { name: '3' }])).toBe(4);
   });
 });

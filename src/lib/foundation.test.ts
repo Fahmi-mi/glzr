@@ -25,6 +25,12 @@ describe('core foundation types and ipc error normalization', () => {
       width: 264
     });
     expect(session.workspaces).toHaveLength(1);
+    expect(session.workspaces[0].name).toBe('1');
+  });
+
+  it('creates default workspace with name 1 when name argument is omitted', () => {
+    const ws = createInitialWorkspace();
+    expect(ws.name).toBe('1');
   });
 
   it('normalizes structured and standard ipc errors', () => {

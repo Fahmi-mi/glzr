@@ -23,6 +23,7 @@
     maximizedPaneId: string | null;
     workspaceVisible: boolean;
     dirtyTabs: Record<string, boolean>;
+    theme?: 'dark' | 'light';
     onFocusPane: (paneId: string) => void;
     onSelectTab: (paneId: string, tabId: string) => void;
     onCloseTab: (paneId: string, tabId: string) => void;
@@ -48,6 +49,7 @@
     maximizedPaneId,
     workspaceVisible,
     dirtyTabs,
+    theme = 'dark',
     onFocusPane,
     onSelectTab,
     onCloseTab,
@@ -154,6 +156,7 @@
         {maximizedPaneId}
         {workspaceVisible}
         {dirtyTabs}
+        {theme}
         {onFocusPane}
         {onSelectTab}
         {onCloseTab}
@@ -190,6 +193,7 @@
         {maximizedPaneId}
         {workspaceVisible}
         {dirtyTabs}
+        {theme}
         {onFocusPane}
         {onSelectTab}
         {onCloseTab}
@@ -381,6 +385,7 @@
         <TerminalTab
           sessionId={termTab.id}
           visible={workspaceVisible && activePaneTab?.id === termTab.id}
+          {theme}
           onOpenLocalhost={(url) => onAddPreviewTab(node.id, url)}
         />
       {/each}

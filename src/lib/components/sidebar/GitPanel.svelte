@@ -462,6 +462,10 @@
 
   .file-row {
     height: 28px;
+    min-height: 28px;
+    line-height: 28px;
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding: 0 4px;
     border-radius: var(--radius-ctrl);
     display: flex;
