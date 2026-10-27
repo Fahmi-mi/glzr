@@ -114,9 +114,11 @@
     },
     '.cm-scroller': {
       fontFamily: 'var(--font-mono)',
-      lineHeight: '1.8',
+      lineHeight: '24px',
       padding: '16px 0',
-      overflow: 'auto'
+      overflow: 'auto',
+      overscrollBehavior: 'contain',
+      willChange: 'transform'
     },
     '.cm-content': {
       caretColor: 'var(--ac)',
@@ -679,12 +681,19 @@
     font-size: 12px;
   }
 
-  .viewer-body,
+  .viewer-body {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+
   .editor-host {
     flex: 1;
     min-height: 0;
     width: 100%;
     overflow: hidden;
+    contain: strict;
   }
 
   .muted {

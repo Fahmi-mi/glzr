@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
+  import Check from '@lucide/svelte/icons/check';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import Minus from '@lucide/svelte/icons/minus';
   import Plus from '@lucide/svelte/icons/plus';
@@ -33,6 +35,11 @@
 
   let statusData = $state<GitStatusDto | null>(null);
   let branchesData = $state<GitBranchesDto | null>(null);
+  let branchDropdownOpen = $state(false);
+  let highlightedIndex = $state(0);
+  let dropdownContainerEl = $state<HTMLDivElement | null>(null);
+  let triggerBtnEl = $state<HTMLButtonElement | null>(null);
+  let popoverEl = $state<HTMLDivElement | null>(null);
   let commitMessage = $state('');
   let loading = $state(true);
   let busy = $state(false);
@@ -103,13 +110,84 @@
     });
   }
 
-  async function handleBranchChange(event: Event) {
-    const select = event.currentTarget as HTMLSelectElement;
-    const targetBranch = select.value;
+  function scrollHighlightedIntoView() {
+    if (!popoverEl) return;
+    const items = popoverEl.querySelectorAll<HTMLButtonElement>('.branch-item');
+    const target = items[highlightedIndex];
+    target?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function openBranchDropdown() {
+    if (busy || !branchesData || branchesData.branches.length === 0) return;
+    const currentBranch = statusData?.branch;
+    const idx = branchesData.branches.findIndex((b) => b === currentBranch);
+    highlightedIndex = idx >= 0 ? idx : 0;
+    branchDropdownOpen = true;
+    queueMicrotask(() => {
+      scrollHighlightedIntoView();
+    });
+  }
+
+  function toggleBranchDropdown() {
+    if (branchDropdownOpen) {
+      branchDropdownOpen = false;
+    } else {
+      openBranchDropdown();
+    }
+  }
+
+  async function selectBranch(targetBranch: string) {
+    branchDropdownOpen = false;
     if (!targetBranch || targetBranch === statusData?.branch) return;
     await runAction(async () => {
       await gitCheckout(targetBranch);
     });
+  }
+
+  function handleDropdownKeydown(e: KeyboardEvent) {
+    const branches = branchesData?.branches ?? [];
+    if (!branchDropdownOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openBranchDropdown();
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      branchDropdownOpen = false;
+      triggerBtnEl?.focus();
+    } else if (e.key === 'Tab') {
+      branchDropdownOpen = false;
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (branches.length > 0) {
+        highlightedIndex = (highlightedIndex + 1) % branches.length;
+        scrollHighlightedIntoView();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (branches.length > 0) {
+        highlightedIndex = (highlightedIndex - 1 + branches.length) % branches.length;
+        scrollHighlightedIntoView();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < branches.length) {
+        void selectBranch(branches[highlightedIndex]);
+      }
+    }
+  }
+
+  function handleWindowPointerDown(e: PointerEvent) {
+    if (
+      branchDropdownOpen &&
+      dropdownContainerEl &&
+      !dropdownContainerEl.contains(e.target as Node)
+    ) {
+      branchDropdownOpen = false;
+    }
   }
 
   async function handleConfirmDiscard() {
@@ -121,6 +199,8 @@
     });
   }
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} />
 
 <aside class="git-panel">
   <div class="panel-header">
@@ -173,22 +253,73 @@
   {:else}
     <div class="branch-bar">
       <div class="branch-selector">
-        <GitBranch size={14} strokeWidth={2} />
         {#if branchesData && branchesData.branches.length > 0 && !statusData.detached}
-          <select
-            class="branch-select"
-            value={statusData.branch ?? ''}
-            disabled={busy}
-            onchange={handleBranchChange}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="branch-dropdown"
+            bind:this={dropdownContainerEl}
+            onkeydown={handleDropdownKeydown}
           >
-            {#each branchesData.branches as br (br)}
-              <option value={br}>{br}</option>
-            {/each}
-          </select>
+            <button
+              bind:this={triggerBtnEl}
+              type="button"
+              class="branch-trigger"
+              disabled={busy}
+              aria-haspopup="listbox"
+              aria-expanded={branchDropdownOpen}
+              aria-label={`Current branch: ${statusData.branch ?? 'unknown'}`}
+              onclick={toggleBranchDropdown}
+            >
+              <span class="branch-trigger-left">
+                <span class="branch-trigger-icon">
+                  <GitBranch size={13} strokeWidth={2} />
+                </span>
+                <span class="branch-trigger-label">
+                  {statusData.branch ?? 'Select branch'}
+                </span>
+              </span>
+              <span class="branch-trigger-chevron">
+                <ChevronDown size={12} strokeWidth={2} />
+              </span>
+            </button>
+
+            {#if branchDropdownOpen}
+              <div
+                bind:this={popoverEl}
+                class="branch-popover"
+                role="listbox"
+                tabindex="-1"
+                aria-label="Git branches"
+              >
+                {#each branchesData.branches as br, i (br)}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={br === statusData.branch}
+                    class="branch-item"
+                    class:active={br === statusData.branch}
+                    class:highlighted={i === highlightedIndex}
+                    onmouseenter={() => (highlightedIndex = i)}
+                    onclick={() => selectBranch(br)}
+                  >
+                    <span class="branch-item-name">{br}</span>
+                    {#if br === statusData.branch}
+                      <span class="branch-item-check">
+                        <Check size={12} strokeWidth={2} />
+                      </span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
         {:else}
-          <span class="branch-label">
-            {statusData.detached ? 'Detached HEAD' : (statusData.branch ?? 'main')}
-          </span>
+          <div class="branch-detached-label">
+            <GitBranch size={13} strokeWidth={2} />
+            <span class="branch-label">
+              {statusData.detached ? 'Detached HEAD' : (statusData.branch ?? 'main')}
+            </span>
+          </div>
         {/if}
       </div>
 
@@ -390,16 +521,143 @@
     flex: 1;
   }
 
-  .branch-select {
+  .branch-dropdown {
+    position: relative;
     flex: 1;
     min-width: 0;
+  }
+
+  .branch-trigger {
+    width: 100%;
     height: 24px;
+    padding: 0 8px;
     background: var(--el);
-    color: var(--tx);
     border: 1px solid var(--bd);
     border-radius: var(--radius-ctrl);
+    color: var(--tx);
     font-size: 12px;
-    padding: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .branch-trigger:hover:not(:disabled) {
+    border-color: var(--dm);
+  }
+
+  .branch-trigger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .branch-trigger-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .branch-trigger-icon {
+    display: flex;
+    align-items: center;
+    color: var(--dm);
+    flex-shrink: 0;
+  }
+
+  .branch-trigger-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    color: var(--tx);
+    font-size: 12px;
+  }
+
+  .branch-trigger-chevron {
+    display: flex;
+    align-items: center;
+    color: var(--dm);
+    flex-shrink: 0;
+  }
+
+  .branch-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    max-width: 280px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--pn);
+    border: 1px solid var(--bd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-float);
+    z-index: 50;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .branch-item {
+    width: 100%;
+    height: 26px;
+    min-height: 26px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: var(--radius-ctrl);
+    background: transparent;
+    color: var(--tx);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .branch-item:hover,
+  .branch-item.highlighted {
+    background: var(--el);
+  }
+
+  .branch-item.active {
+    background: var(--acs);
+    color: var(--ac);
+  }
+
+  .branch-item.active.highlighted {
+    background: var(--acs);
+    color: var(--ac);
+  }
+
+  .branch-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .branch-item-check {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--ac);
+  }
+
+  .branch-detached-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--dm);
+    font-size: 12px;
+    min-width: 0;
   }
 
   .branch-label {

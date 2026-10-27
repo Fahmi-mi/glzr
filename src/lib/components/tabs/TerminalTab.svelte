@@ -56,7 +56,8 @@
   let detectedLocalUrl = $state<string | null>(null);
   let fontSize = $state(14);
 
-  let term: Terminal | null = null;
+  let term = $state<Terminal | null>(null);
+  let canvasAddon = $state<CanvasAddon | null>(null);
   let fitAddon: FitAddon | null = null;
   let searchAddon: SearchAddon | null = null;
   let resizeObserver: ResizeObserver | null = null;
@@ -155,13 +156,17 @@
   });
 
   $effect(() => {
-    if (term) {
-      term.options.theme = getTerminalTheme(theme);
-      try {
-        term.refresh(0, Math.max(0, term.rows - 1));
-      } catch {
-        // Ignore during transient state
-      }
+    const activeTheme = theme;
+    const activeTerm = term;
+    const activeCanvas = canvasAddon;
+    if (!activeTerm) return;
+
+    activeTerm.options.theme = getTerminalTheme(activeTheme);
+    activeCanvas?.clearTextureAtlas();
+    try {
+      activeTerm.refresh(0, Math.max(0, activeTerm.rows - 1));
+    } catch {
+      // Ignore during transient state
     }
   });
 
@@ -202,7 +207,9 @@
     instance.open(hostEl);
 
     try {
-      instance.loadAddon(new CanvasAddon());
+      const addon = new CanvasAddon();
+      canvasAddon = addon;
+      instance.loadAddon(addon);
     } catch {
       // Fallback to default DOM renderer
     }
@@ -326,6 +333,8 @@
     unlistenOutput?.();
     unlistenExit?.();
     void ptyKill(activeSessionId).catch(() => {});
+    canvasAddon?.dispose();
+    canvasAddon = null;
     term?.dispose();
     term = null;
   });
