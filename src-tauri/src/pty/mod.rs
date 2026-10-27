@@ -83,11 +83,26 @@ pub fn spawn_session_entry(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(generate_session_id);
 
-    let previous = {
+    let to_kill: Vec<Arc<PtySession>> = {
         let mut guard = sessions.lock().map_err(|_| AppError::LockPoisoned)?;
-        guard.remove(&session_id)
+        let mut removed = Vec::new();
+        if let Some(old) = guard.remove(&session_id) {
+            removed.push(old);
+        }
+        if let Some((tab_prefix, _)) = session_id.split_once(':') {
+            let prefix_with_colon = format!("{}:", tab_prefix);
+            guard.retain(|k, v| {
+                if k.starts_with(&prefix_with_colon) {
+                    removed.push(Arc::clone(v));
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        removed
     };
-    if let Some(old_session) = previous {
+    for old_session in to_kill {
         let _ = old_session.kill();
     }
 
@@ -147,12 +162,27 @@ pub fn kill_session_entry(
     sessions: &Mutex<HashMap<String, Arc<PtySession>>>,
     session_id: &str,
 ) -> AppResult<()> {
-    let removed = {
+    let to_kill: Vec<Arc<PtySession>> = {
         let mut guard = sessions.lock().map_err(|_| AppError::LockPoisoned)?;
-        guard.remove(session_id)
+        let mut removed = Vec::new();
+        if let Some(session) = guard.remove(session_id) {
+            removed.push(session);
+        }
+        if let Some((tab_prefix, _)) = session_id.split_once(':') {
+            let prefix_with_colon = format!("{}:", tab_prefix);
+            guard.retain(|k, v| {
+                if k.starts_with(&prefix_with_colon) {
+                    removed.push(Arc::clone(v));
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        removed
     };
-    if let Some(session) = removed {
-        session.kill()?;
+    for session in to_kill {
+        let _ = session.kill();
     }
     Ok(())
 }
@@ -191,6 +221,31 @@ mod tests {
         assert!(collected.contains("pty_ready"));
 
         kill_session_entry(&map, "test-1")?;
+        assert!(map.lock().map_err(|_| AppError::LockPoisoned)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn cleans_up_previous_session_instances_by_tab_prefix() -> AppResult<()> {
+        let tmp = TempDir::new()?;
+        let map: Mutex<HashMap<String, Arc<PtySession>>> = Mutex::new(HashMap::new());
+
+        let (dto1, _arc1, _rx1) =
+            spawn_session_entry(&map, Some("tab-1:inst-1".into()), "sh", &[], tmp.path(), 80, 24)?;
+        assert_eq!(dto1.session_id, "tab-1:inst-1");
+        assert_eq!(map.lock().map_err(|_| AppError::LockPoisoned)?.len(), 1);
+
+        let (dto2, _arc2, _rx2) =
+            spawn_session_entry(&map, Some("tab-1:inst-2".into()), "sh", &[], tmp.path(), 80, 24)?;
+        assert_eq!(dto2.session_id, "tab-1:inst-2");
+
+        let guard = map.lock().map_err(|_| AppError::LockPoisoned)?;
+        assert_eq!(guard.len(), 1);
+        assert!(guard.contains_key("tab-1:inst-2"));
+        assert!(!guard.contains_key("tab-1:inst-1"));
+        drop(guard);
+
+        kill_session_entry(&map, "tab-1:inst-2")?;
         assert!(map.lock().map_err(|_| AppError::LockPoisoned)?.is_empty());
         Ok(())
     }

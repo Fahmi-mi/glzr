@@ -6,7 +6,7 @@
   import { SearchAddon } from '@xterm/addon-search';
   import { Unicode11Addon } from '@xterm/addon-unicode11';
   import { WebLinksAddon } from '@xterm/addon-web-links';
-  import { WebglAddon } from '@xterm/addon-webgl';
+  import { CanvasAddon } from '@xterm/addon-canvas';
   import Globe from '@lucide/svelte/icons/globe';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Search from '@lucide/svelte/icons/search';
@@ -24,6 +24,7 @@
   import {
     clampTerminalFontSize,
     extractLocalhostUrl,
+    getTerminalTheme,
     isLargePaste,
     resolveTerminalKey
   } from '$lib/terminal';
@@ -31,11 +32,19 @@
   interface Props {
     sessionId: string;
     visible?: boolean;
+    theme?: 'dark' | 'light';
     onOpenLocalhost?: (url: string) => void;
   }
 
-  let { sessionId, visible = true, onOpenLocalhost }: Props = $props();
+  let { sessionId, visible = true, theme = 'dark', onOpenLocalhost }: Props = $props();
 
+  function generateSessionToken(): string {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  // svelte-ignore state_referenced_locally
+  let activeSessionId = $state(`${sessionId}:${generateSessionToken()}`);
+  let restarting = $state(false);
   let hostEl = $state<HTMLDivElement | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let searchOpen = $state(false);
@@ -47,7 +56,8 @@
   let detectedLocalUrl = $state<string | null>(null);
   let fontSize = $state(14);
 
-  let term: Terminal | null = null;
+  let term = $state<Terminal | null>(null);
+  let canvasAddon = $state<CanvasAddon | null>(null);
   let fitAddon: FitAddon | null = null;
   let searchAddon: SearchAddon | null = null;
   let resizeObserver: ResizeObserver | null = null;
@@ -64,7 +74,7 @@
       if (!visible || !term || !fitAddon) return;
       try {
         fitAddon.fit();
-        void ptyResize(sessionId, term.cols, term.rows).catch(() => {});
+        void ptyResize(activeSessionId, term.cols, term.rows).catch(() => {});
       } catch {
         // Ignore transient layout state
       }
@@ -107,19 +117,58 @@
     exitCode = null;
     errorMsg = null;
     try {
-      await ptySpawn(sessionId, term.cols, term.rows);
+      await ptySpawn(activeSessionId, term.cols, term.rows);
       term.focus();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memulai sesi terminal';
+      errorMsg = normalized.message ?? 'Failed to start terminal session';
     }
   }
 
   export async function restartSession() {
-    if (!term) return;
-    term.clear();
-    await spawnShell();
+    if (!term || restarting) return;
+    restarting = true;
+    try {
+      const oldSessionId = activeSessionId;
+      activeSessionId = `${sessionId}:${generateSessionToken()}`;
+      void ptyKill(oldSessionId).catch(() => {});
+      exited = false;
+      exitCode = null;
+      errorMsg = null;
+      term.reset();
+      try {
+        fitAddon?.fit();
+      } catch {
+        // Ignore transient fit error
+      }
+      await spawnShell();
+    } finally {
+      restarting = false;
+    }
   }
+
+  $effect(() => {
+    if (!activeSessionId.startsWith(`${sessionId}:`)) {
+      const oldSessionId = activeSessionId;
+      activeSessionId = `${sessionId}:${generateSessionToken()}`;
+      void ptyKill(oldSessionId).catch(() => {});
+    }
+  });
+
+  $effect(() => {
+    const activeTheme = theme;
+    const activeTerm = term;
+    const activeCanvas = canvasAddon;
+    if (!activeTerm) return;
+
+    activeTerm.options.theme = getTerminalTheme(activeTheme);
+    activeCanvas?.clearTextureAtlas();
+    try {
+      activeTerm.refresh(0, Math.max(0, activeTerm.rows - 1));
+    } catch {
+      // Ignore during transient state
+    }
+  });
 
   onMount(async () => {
     if (!hostEl) return;
@@ -132,29 +181,9 @@
       fontFamily:
         "'JetBrains Mono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize,
-      lineHeight: 1.4,
-      theme: {
-        background: '#141517',
-        foreground: '#e6e8eb',
-        cursor: '#5b9cf5',
-        selectionBackground: 'rgba(91, 156, 245, 0.24)',
-        black: '#1c1e22',
-        red: '#e06c75',
-        green: '#4ec994',
-        yellow: '#e5a54b',
-        blue: '#5b9cf5',
-        magenta: '#c678dd',
-        cyan: '#56b6c2',
-        white: '#e6e8eb',
-        brightBlack: '#525761',
-        brightRed: '#e06c75',
-        brightGreen: '#4ec994',
-        brightYellow: '#e5a54b',
-        brightBlue: '#5b9cf5',
-        brightMagenta: '#c678dd',
-        brightCyan: '#56b6c2',
-        brightWhite: '#ffffff'
-      }
+      lineHeight: 1.35,
+      smoothScrollDuration: 0,
+      theme: getTerminalTheme(theme)
     });
 
     const fit = new FitAddon();
@@ -178,13 +207,11 @@
     instance.open(hostEl);
 
     try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-      });
-      instance.loadAddon(webgl);
+      const addon = new CanvasAddon();
+      canvasAddon = addon;
+      instance.loadAddon(addon);
     } catch {
-      // Fallback to default renderer
+      // Fallback to default DOM renderer
     }
 
     instance.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
@@ -244,7 +271,7 @@
 
     instance.onData((data) => {
       if (!exited) {
-        void ptyWrite(sessionId, data).catch(() => {});
+        void ptyWrite(activeSessionId, data).catch(() => {});
       }
     });
 
@@ -259,9 +286,12 @@
     }
 
     unlistenOutput = await onBackendEvent('pty:output', (payload) => {
-      if (payload.sessionId === sessionId && term) {
+      if (payload.sessionId === activeSessionId && term) {
         term.write(payload.data);
-        if (payload.data.length <= 2048) {
+        if (
+          payload.data.length <= 2048 &&
+          (payload.data.includes('localhost') || payload.data.includes('127.0.0.1'))
+        ) {
           const found = extractLocalhostUrl(payload.data);
           if (found) {
             detectedLocalUrl = found;
@@ -271,7 +301,7 @@
     });
 
     unlistenExit = await onBackendEvent('pty:exit', (payload) => {
-      if (payload.sessionId === sessionId) {
+      if (payload.sessionId === activeSessionId) {
         exited = true;
         exitCode = payload.code;
       }
@@ -302,7 +332,9 @@
     resizeObserver?.disconnect();
     unlistenOutput?.();
     unlistenExit?.();
-    void ptyKill(sessionId).catch(() => {});
+    void ptyKill(activeSessionId).catch(() => {});
+    canvasAddon?.dispose();
+    canvasAddon = null;
     term?.dispose();
     term = null;
   });
@@ -317,7 +349,7 @@
         bind:value={searchQuery}
         type="text"
         class="search-input"
-        placeholder="Cari di terminal..."
+        placeholder="Find in terminal..."
         onkeydown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -335,7 +367,7 @@
       />
       <button
         class="icon-btn"
-        aria-label="Tutup pencarian"
+        aria-label="Close search"
         onclick={() => {
           searchOpen = false;
           term?.focus();
@@ -349,18 +381,16 @@
   {#if errorMsg}
     <div class="terminal-banner error">
       <span>{errorMsg}</span>
-      <button class="small-btn" onclick={restartSession}>Coba lagi</button>
+      <button class="small-btn" onclick={restartSession}>Retry</button>
     </div>
   {/if}
 
   {#if pendingLargePaste}
     <div class="terminal-banner warning">
-      <span
-        >Teks yang ditempel berukuran besar (lebih dari 64 KB). Lanjutkan tempel ke terminal?</span
-      >
+      <span>Pasted text is very large (> 64 KB). Proceed with pasting to terminal?</span>
       <div class="banner-actions">
-        <button class="primary small-btn" onclick={confirmLargePaste}>Tempel</button>
-        <button class="small-btn" onclick={() => (pendingLargePaste = null)}>Batal</button>
+        <button class="primary small-btn" onclick={confirmLargePaste}>Paste</button>
+        <button class="small-btn" onclick={() => (pendingLargePaste = null)}>Cancel</button>
       </div>
     </div>
   {/if}
@@ -371,7 +401,7 @@
     <div class="detected-url-pill">
       <button
         class="open-preview-btn"
-        title="Buka di tab preview"
+        title="Open in preview tab"
         onclick={() => {
           if (detectedLocalUrl) {
             onOpenLocalhost(detectedLocalUrl);
@@ -384,7 +414,7 @@
       </button>
       <button
         class="dismiss-pill-btn"
-        aria-label="Sembunyikan notifikasi port"
+        aria-label="Dismiss port notification"
         onclick={() => (detectedLocalUrl = null)}
       >
         <X size={11} strokeWidth={2} />
@@ -394,10 +424,10 @@
 
   {#if exited}
     <div class="terminal-banner exited">
-      <span>Proses selesai{exitCode !== null ? ` (kode keluar ${exitCode})` : ''}.</span>
-      <button class="primary small-btn" onclick={restartSession}>
+      <span>Process completed{exitCode !== null ? ` (exit code ${exitCode})` : ''}.</span>
+      <button class="primary small-btn" disabled={restarting} onclick={restartSession}>
         <RotateCcw size={12} strokeWidth={2} />
-        <span>Mulai ulang</span>
+        <span>Restart</span>
       </button>
     </div>
   {/if}

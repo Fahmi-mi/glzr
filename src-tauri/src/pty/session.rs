@@ -8,10 +8,9 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const READ_CHUNK_BYTES: usize = 32 * 1024;
-const BATCH_INTERVAL: Duration = Duration::from_millis(12);
 const BATCH_MAX_BYTES: usize = 64 * 1024;
 const CHANNEL_BOUND: usize = 32;
 
@@ -128,9 +127,11 @@ impl PtySession {
         self.stop_flag.store(true, Ordering::SeqCst);
         let mut child = self.child.lock().map_err(|_| PtyError::LockPoisoned)?;
         if let Some(pid) = child.process_id() {
-            let neg_pgid = format!("-{}", pid);
-            let _ = Command::new("kill").args(["-TERM", &neg_pgid]).status();
-            let _ = Command::new("kill").args(["-KILL", &neg_pgid]).status();
+            if pid > 1 {
+                let neg_pgid = format!("-{}", pid);
+                let _ = Command::new("kill").args(["-TERM", &neg_pgid]).status();
+                let _ = Command::new("kill").args(["-KILL", &neg_pgid]).status();
+            }
         }
         let _ = child.kill();
         let _ = child.wait();
@@ -188,49 +189,82 @@ fn run_batched_reader(
     tx: SyncSender<String>,
     stop_flag: Arc<AtomicBool>,
 ) {
-    let mut read_buf = vec![0u8; READ_CHUNK_BYTES];
-    let mut utf8_pending = Vec::with_capacity(4);
-    let mut batch = String::with_capacity(BATCH_MAX_BYTES);
-    let mut last_flush = Instant::now();
+    let (raw_tx, raw_rx) = mpsc::sync_channel::<String>(CHANNEL_BOUND);
+    let stop_reader = Arc::clone(&stop_flag);
 
-    loop {
+    let reader_thread = thread::spawn(move || {
+        let mut read_buf = vec![0u8; READ_CHUNK_BYTES];
+        let mut utf8_pending = Vec::with_capacity(4);
+
+        loop {
+            if stop_reader.load(Ordering::Relaxed) {
+                break;
+            }
+
+            match reader.read(&mut read_buf) {
+                Ok(0) => {
+                    if !utf8_pending.is_empty() {
+                        let fallback = String::from_utf8_lossy(&utf8_pending).into_owned();
+                        let _ = raw_tx.send(fallback);
+                    }
+                    break;
+                }
+                Ok(n) => {
+                    let chunk_str = decode_utf8_stream(&mut utf8_pending, &read_buf[..n]);
+                    if !chunk_str.is_empty() && raw_tx.send(chunk_str).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    if !utf8_pending.is_empty() {
+                        let fallback = String::from_utf8_lossy(&utf8_pending).into_owned();
+                        let _ = raw_tx.send(fallback);
+                    }
+                    break;
+                }
+            }
+        }
+    });
+
+    let mut batch = String::with_capacity(BATCH_MAX_BYTES);
+    let poll_timeout = Duration::from_millis(2);
+
+    while let Ok(first) = raw_rx.recv() {
         if stop_flag.load(Ordering::Relaxed) {
             break;
         }
 
-        match reader.read(&mut read_buf) {
-            Ok(0) => {
-                if !batch.is_empty() {
-                    let _ = tx.send(std::mem::take(&mut batch));
-                }
-                break;
-            }
-            Ok(n) => {
-                let chunk_str = decode_utf8_stream(&mut utf8_pending, &read_buf[..n]);
-                batch.push_str(&chunk_str);
+        batch.push_str(&first);
 
-                if batch.len() >= BATCH_MAX_BYTES || last_flush.elapsed() >= BATCH_INTERVAL {
-                    let outgoing = std::mem::take(&mut batch);
-                    match tx.try_send(outgoing) {
-                        Ok(()) => {}
-                        Err(TrySendError::Full(msg)) => {
-                            if tx.send(msg).is_err() {
-                                break;
-                            }
-                        }
-                        Err(TrySendError::Disconnected(_)) => break,
-                    }
-                    last_flush = Instant::now();
+        if batch.len() >= 1024 {
+            while batch.len() < BATCH_MAX_BYTES {
+                match raw_rx.recv_timeout(poll_timeout) {
+                    Ok(more) => batch.push_str(&more),
+                    Err(_) => break,
                 }
             }
-            Err(_) => {
-                if !batch.is_empty() {
-                    let _ = tx.send(std::mem::take(&mut batch));
+        } else {
+            while batch.len() < BATCH_MAX_BYTES {
+                match raw_rx.try_recv() {
+                    Ok(more) => batch.push_str(&more),
+                    Err(_) => break,
                 }
-                break;
             }
         }
+
+        let outgoing = std::mem::take(&mut batch);
+        match tx.try_send(outgoing) {
+            Ok(()) => {}
+            Err(TrySendError::Full(msg)) => {
+                if tx.send(msg).is_err() {
+                    break;
+                }
+            }
+            Err(TrySendError::Disconnected(_)) => break,
+        }
     }
+
+    let _ = reader_thread.join();
 }
 
 #[cfg(test)]

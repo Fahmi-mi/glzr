@@ -74,9 +74,9 @@ describe('focus-based keymap and command palette', () => {
   it('filters command palette entries by label and keywords', () => {
     const noop = () => {};
     const entries: PaletteEntry[] = [
-      { id: '1', label: 'Split kanan', category: 'Aksi', run: noop },
+      { id: '1', label: 'Split right', category: 'Action', run: noop },
       { id: '2', label: 'src/main.rs', category: 'File', run: noop },
-      { id: '3', label: 'Pindah ke workspace Agent', category: 'Workspace', run: noop }
+      { id: '3', label: 'Switch to workspace Agent', category: 'Workspace', run: noop }
     ];
 
     const filtered = filterPaletteEntries(entries, 'split');

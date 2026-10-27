@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
+  import Check from '@lucide/svelte/icons/check';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import Minus from '@lucide/svelte/icons/minus';
   import Plus from '@lucide/svelte/icons/plus';
@@ -33,6 +35,11 @@
 
   let statusData = $state<GitStatusDto | null>(null);
   let branchesData = $state<GitBranchesDto | null>(null);
+  let branchDropdownOpen = $state(false);
+  let highlightedIndex = $state(0);
+  let dropdownContainerEl = $state<HTMLDivElement | null>(null);
+  let triggerBtnEl = $state<HTMLButtonElement | null>(null);
+  let popoverEl = $state<HTMLDivElement | null>(null);
   let commitMessage = $state('');
   let loading = $state(true);
   let busy = $state(false);
@@ -70,7 +77,7 @@
       }
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memuat status Git';
+      errorMsg = normalized.message ?? 'Failed to load Git status';
     } finally {
       loading = false;
     }
@@ -88,7 +95,7 @@
       await refresh();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Operasi Git gagal';
+      errorMsg = normalized.message ?? 'Git operation failed';
     } finally {
       busy = false;
     }
@@ -103,13 +110,84 @@
     });
   }
 
-  async function handleBranchChange(event: Event) {
-    const select = event.currentTarget as HTMLSelectElement;
-    const targetBranch = select.value;
+  function scrollHighlightedIntoView() {
+    if (!popoverEl) return;
+    const items = popoverEl.querySelectorAll<HTMLButtonElement>('.branch-item');
+    const target = items[highlightedIndex];
+    target?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function openBranchDropdown() {
+    if (busy || !branchesData || branchesData.branches.length === 0) return;
+    const currentBranch = statusData?.branch;
+    const idx = branchesData.branches.findIndex((b) => b === currentBranch);
+    highlightedIndex = idx >= 0 ? idx : 0;
+    branchDropdownOpen = true;
+    queueMicrotask(() => {
+      scrollHighlightedIntoView();
+    });
+  }
+
+  function toggleBranchDropdown() {
+    if (branchDropdownOpen) {
+      branchDropdownOpen = false;
+    } else {
+      openBranchDropdown();
+    }
+  }
+
+  async function selectBranch(targetBranch: string) {
+    branchDropdownOpen = false;
     if (!targetBranch || targetBranch === statusData?.branch) return;
     await runAction(async () => {
       await gitCheckout(targetBranch);
     });
+  }
+
+  function handleDropdownKeydown(e: KeyboardEvent) {
+    const branches = branchesData?.branches ?? [];
+    if (!branchDropdownOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openBranchDropdown();
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      branchDropdownOpen = false;
+      triggerBtnEl?.focus();
+    } else if (e.key === 'Tab') {
+      branchDropdownOpen = false;
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (branches.length > 0) {
+        highlightedIndex = (highlightedIndex + 1) % branches.length;
+        scrollHighlightedIntoView();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (branches.length > 0) {
+        highlightedIndex = (highlightedIndex - 1 + branches.length) % branches.length;
+        scrollHighlightedIntoView();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < branches.length) {
+        void selectBranch(branches[highlightedIndex]);
+      }
+    }
+  }
+
+  function handleWindowPointerDown(e: PointerEvent) {
+    if (
+      branchDropdownOpen &&
+      dropdownContainerEl &&
+      !dropdownContainerEl.contains(e.target as Node)
+    ) {
+      branchDropdownOpen = false;
+    }
   }
 
   async function handleConfirmDiscard() {
@@ -122,15 +200,17 @@
   }
 </script>
 
+<svelte:window onpointerdown={handleWindowPointerDown} />
+
 <aside class="git-panel">
   <div class="panel-header">
-    <span class="panel-title">Perubahan ({totalChanges})</span>
+    <span class="panel-title">Changes ({totalChanges})</span>
     <div class="header-actions">
       {#if statusData?.isRepo}
         <button
           class="icon-btn"
-          title="Git Pull"
-          aria-label="Git Pull"
+          title="Pull"
+          aria-label="Pull"
           disabled={busy}
           onclick={() => runAction(() => gitPull())}
         >
@@ -138,8 +218,8 @@
         </button>
         <button
           class="icon-btn"
-          title="Git Push"
-          aria-label="Git Push"
+          title="Push"
+          aria-label="Push"
           disabled={busy}
           onclick={() => runAction(() => gitPush())}
         >
@@ -148,8 +228,8 @@
       {/if}
       <button
         class="icon-btn"
-        title="Segarkan status Git"
-        aria-label="Segarkan status Git"
+        title="Refresh Git status"
+        aria-label="Refresh Git status"
         disabled={busy}
         onclick={() => refresh()}
       >
@@ -160,35 +240,86 @@
 
   {#if loading}
     <div class="empty-state">
-      <p class="muted">Memuat status Git...</p>
+      <p class="muted">Loading Git status...</p>
     </div>
   {:else if !statusData?.gitAvailable}
     <div class="empty-state">
-      <p class="muted">Git tidak terpasang di sistem.</p>
+      <p class="muted">Git is not installed on system.</p>
     </div>
   {:else if !statusData.isRepo}
     <div class="empty-state">
-      <p class="muted">Folder proyek ini bukan repositori Git.</p>
+      <p class="muted">This folder is not a Git repository.</p>
     </div>
   {:else}
     <div class="branch-bar">
       <div class="branch-selector">
-        <GitBranch size={14} strokeWidth={2} />
         {#if branchesData && branchesData.branches.length > 0 && !statusData.detached}
-          <select
-            class="branch-select"
-            value={statusData.branch ?? ''}
-            disabled={busy}
-            onchange={handleBranchChange}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="branch-dropdown"
+            bind:this={dropdownContainerEl}
+            onkeydown={handleDropdownKeydown}
           >
-            {#each branchesData.branches as br (br)}
-              <option value={br}>{br}</option>
-            {/each}
-          </select>
+            <button
+              bind:this={triggerBtnEl}
+              type="button"
+              class="branch-trigger"
+              disabled={busy}
+              aria-haspopup="listbox"
+              aria-expanded={branchDropdownOpen}
+              aria-label={`Current branch: ${statusData.branch ?? 'unknown'}`}
+              onclick={toggleBranchDropdown}
+            >
+              <span class="branch-trigger-left">
+                <span class="branch-trigger-icon">
+                  <GitBranch size={13} strokeWidth={2} />
+                </span>
+                <span class="branch-trigger-label">
+                  {statusData.branch ?? 'Select branch'}
+                </span>
+              </span>
+              <span class="branch-trigger-chevron">
+                <ChevronDown size={12} strokeWidth={2} />
+              </span>
+            </button>
+
+            {#if branchDropdownOpen}
+              <div
+                bind:this={popoverEl}
+                class="branch-popover"
+                role="listbox"
+                tabindex="-1"
+                aria-label="Git branches"
+              >
+                {#each branchesData.branches as br, i (br)}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={br === statusData.branch}
+                    class="branch-item"
+                    class:active={br === statusData.branch}
+                    class:highlighted={i === highlightedIndex}
+                    onmouseenter={() => (highlightedIndex = i)}
+                    onclick={() => selectBranch(br)}
+                  >
+                    <span class="branch-item-name">{br}</span>
+                    {#if br === statusData.branch}
+                      <span class="branch-item-check">
+                        <Check size={12} strokeWidth={2} />
+                      </span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
         {:else}
-          <span class="branch-label">
-            {statusData.detached ? 'HEAD terlepas' : (statusData.branch ?? 'main')}
-          </span>
+          <div class="branch-detached-label">
+            <GitBranch size={13} strokeWidth={2} />
+            <span class="branch-label">
+              {statusData.detached ? 'Detached HEAD' : (statusData.branch ?? 'main')}
+            </span>
+          </div>
         {/if}
       </div>
 
@@ -200,11 +331,11 @@
     {#if statusData.merging || statusData.rebasing || statusData.detached || statusData.hasConflicts}
       <div class="state-banner">
         {#if statusData.rebasing}
-          <span>Rebase sedang berjalan. Selesaikan lewat terminal.</span>
+          <span>Rebase in progress. Resolve via terminal.</span>
         {:else if statusData.merging || statusData.hasConflicts}
-          <span>Merge conflict terdeteksi. Selesaikan konflik lewat terminal.</span>
+          <span>Merge conflicts detected. Resolve conflicts via terminal.</span>
         {:else if statusData.detached}
-          <span>Detached HEAD aktif.</span>
+          <span>Detached HEAD mode.</span>
         {/if}
       </div>
     {/if}
@@ -218,7 +349,7 @@
     <div class="changes-scroll">
       {#if statusData.conflicted.length > 0}
         <div class="group-section">
-          <div class="group-title">Konflik ({statusData.conflicted.length})</div>
+          <div class="group-title">Conflicts ({statusData.conflicted.length})</div>
           {#each statusData.conflicted as item (item.path)}
             <div class="file-row">
               <button class="file-main" onclick={() => onOpenDiff?.(item.path, false)}>
@@ -231,9 +362,9 @@
       {/if}
 
       <div class="group-section">
-        <div class="group-title">Staged ({statusData.staged.length})</div>
+        <div class="group-title">Staged Changes ({statusData.staged.length})</div>
         {#if statusData.staged.length === 0}
-          <div class="group-empty">Belum ada file di-stage</div>
+          <div class="group-empty">No staged changes</div>
         {:else}
           {#each statusData.staged as item (item.path)}
             <div class="file-row">
@@ -258,9 +389,9 @@
       </div>
 
       <div class="group-section">
-        <div class="group-title">Perubahan ({unstagedAll.length})</div>
+        <div class="group-title">Changes ({unstagedAll.length})</div>
         {#if unstagedAll.length === 0}
-          <div class="group-empty">Tidak ada perubahan kerja</div>
+          <div class="group-empty">No changes</div>
         {:else}
           {#each unstagedAll as item (item.path)}
             <div class="file-row">
@@ -280,8 +411,8 @@
                 </button>
                 <button
                   class="row-btn"
-                  title="Buang perubahan file"
-                  aria-label="Buang perubahan file"
+                  title="Discard file changes"
+                  aria-label="Discard file changes"
                   disabled={busy}
                   onclick={() => (confirmDiscardPath = item.path)}
                 >
@@ -297,11 +428,11 @@
     {#if confirmDiscardPath}
       <div class="discard-confirm-box">
         <p class="discard-text">
-          Buang perubahan pada <span class="mono">{confirmDiscardPath}</span>?
+          Discard changes in <span class="mono">{confirmDiscardPath}</span>?
         </p>
         <div class="discard-actions">
-          <button class="danger small-btn" onclick={handleConfirmDiscard}>Buang</button>
-          <button class="small-btn" onclick={() => (confirmDiscardPath = null)}>Batal</button>
+          <button class="danger small-btn" onclick={handleConfirmDiscard}>Discard</button>
+          <button class="small-btn" onclick={() => (confirmDiscardPath = null)}>Cancel</button>
         </div>
       </div>
     {/if}
@@ -312,7 +443,7 @@
         bind:value={commitMessage}
         type="text"
         class="commit-input"
-        placeholder="Pesan commit..."
+        placeholder="Commit message (Ctrl+Enter to commit)..."
         onkeydown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
@@ -390,16 +521,143 @@
     flex: 1;
   }
 
-  .branch-select {
+  .branch-dropdown {
+    position: relative;
     flex: 1;
     min-width: 0;
+  }
+
+  .branch-trigger {
+    width: 100%;
     height: 24px;
+    padding: 0 8px;
     background: var(--el);
-    color: var(--tx);
     border: 1px solid var(--bd);
     border-radius: var(--radius-ctrl);
+    color: var(--tx);
     font-size: 12px;
-    padding: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .branch-trigger:hover:not(:disabled) {
+    border-color: var(--dm);
+  }
+
+  .branch-trigger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .branch-trigger-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .branch-trigger-icon {
+    display: flex;
+    align-items: center;
+    color: var(--dm);
+    flex-shrink: 0;
+  }
+
+  .branch-trigger-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    color: var(--tx);
+    font-size: 12px;
+  }
+
+  .branch-trigger-chevron {
+    display: flex;
+    align-items: center;
+    color: var(--dm);
+    flex-shrink: 0;
+  }
+
+  .branch-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    max-width: 280px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--pn);
+    border: 1px solid var(--bd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-float);
+    z-index: 50;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .branch-item {
+    width: 100%;
+    height: 26px;
+    min-height: 26px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: var(--radius-ctrl);
+    background: transparent;
+    color: var(--tx);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .branch-item:hover,
+  .branch-item.highlighted {
+    background: var(--el);
+  }
+
+  .branch-item.active {
+    background: var(--acs);
+    color: var(--ac);
+  }
+
+  .branch-item.active.highlighted {
+    background: var(--acs);
+    color: var(--ac);
+  }
+
+  .branch-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .branch-item-check {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--ac);
+  }
+
+  .branch-detached-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--dm);
+    font-size: 12px;
+    min-width: 0;
   }
 
   .branch-label {
@@ -462,6 +720,10 @@
 
   .file-row {
     height: 28px;
+    min-height: 28px;
+    line-height: 28px;
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding: 0 4px;
     border-radius: var(--radius-ctrl);
     display: flex;

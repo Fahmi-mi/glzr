@@ -46,7 +46,7 @@ export interface SessionFile {
 
 export function createInitialWorkspace(
   workspaceId = 'ws-1',
-  name = '1 Utama',
+  name = '1',
   cwd = ''
 ): Workspace {
   const tabId = `${workspaceId}-tab-1`;
@@ -72,7 +72,7 @@ export function createInitialWorkspace(
 }
 
 export function createInitialSession(folder: string | null = null): SessionFile {
-  const initialWorkspace = createInitialWorkspace('ws-1', '1 Utama', folder ?? '');
+  const initialWorkspace = createInitialWorkspace('ws-1', '1', folder ?? '');
   return {
     version: 1,
     folder,
