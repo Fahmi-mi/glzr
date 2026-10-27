@@ -1,7 +1,7 @@
 [package]
 name = "glzr"
 version = "0.1.0"
-description = "Terminal-first workspace yang ringan: terminal, editor file, git panel, dan preview localhost dalam satu aplikasi."
+description = "Lightweight terminal-first workspace: terminal, file editor, git panel, and localhost preview in one app."
 authors = ["Fahmi"]
 license = "MIT"
 edition = "2021"

@@ -107,7 +107,7 @@
       if (e.target === e.currentTarget) onClose();
     }}
   >
-    <div class="quick-open-dialog" role="dialog" aria-modal="true" aria-label="Buka cepat file">
+    <div class="quick-open-dialog" role="dialog" aria-modal="true" aria-label="Quick open file">
       <div class="search-header">
         <Search size={14} strokeWidth={2} />
         <input
@@ -116,18 +116,18 @@
           onkeydown={handleKeyDown}
           type="text"
           class="search-input"
-          placeholder="Cari nama file (gunakan :baris untuk lompat ke baris)..."
+          placeholder="Search files by name (append :line to jump to line)..."
         />
         {#if parsed.line !== null}
-          <span class="line-badge">Baris {parsed.line}</span>
+          <span class="line-badge">Line {parsed.line}</span>
         {/if}
       </div>
 
       <div class="results-list">
         {#if loading}
-          <div class="empty-item">Memuat daftar file...</div>
+          <div class="empty-item">Loading file list...</div>
         {:else if filteredFiles.length === 0}
-          <div class="empty-item">Tidak ada file yang cocok</div>
+          <div class="empty-item">No matching files found</div>
         {:else}
           {#each filteredFiles as relPath, idx (relPath)}
             {@const parts = splitFileParts(relPath)}

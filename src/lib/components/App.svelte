@@ -224,90 +224,90 @@
     const entries: PaletteEntry[] = [
       {
         id: 'act:split-right',
-        label: 'Split kanan',
-        category: 'Aksi',
+        label: 'Split right',
+        category: 'Action',
         shortcut: kb.splitRight,
-        keywords: 'pane belah kanan horizontal',
+        keywords: 'pane split right horizontal',
         run: () => handleSplitPane(focusedPaneId, 'row')
       },
       {
         id: 'act:split-down',
-        label: 'Split bawah',
-        category: 'Aksi',
+        label: 'Split down',
+        category: 'Action',
         shortcut: kb.splitDown,
-        keywords: 'pane belah bawah vertikal',
+        keywords: 'pane split down vertical',
         run: () => handleSplitPane(focusedPaneId, 'column')
       },
       {
         id: 'act:new-terminal',
-        label: 'Terminal baru di pane aktif',
-        category: 'Aksi',
+        label: 'New terminal in active pane',
+        category: 'Action',
         shortcut: kb.newTerminal,
-        keywords: 'shell pty bash zsh',
+        keywords: 'shell pty bash zsh terminal',
         run: () => addTerminalTab(focusedPaneId)
       },
       {
         id: 'act:new-preview',
-        label: 'Preview localhost baru',
-        category: 'Aksi',
-        keywords: 'browser iframe server port 5173',
+        label: 'New localhost preview',
+        category: 'Action',
+        keywords: 'browser iframe server port 5173 preview',
         run: () => openPreviewInPane('http://localhost:5173/', focusedPaneId)
       },
       {
         id: 'act:quick-open',
-        label: 'Buka cepat file...',
-        category: 'Aksi',
+        label: 'Quick open file...',
+        category: 'Action',
         shortcut: kb.quickOpen,
-        keywords: 'quick open cari file',
+        keywords: 'quick open find file',
         run: () => {
           quickOpenVisible = true;
         }
       },
       {
         id: 'act:open-folder',
-        label: 'Buka folder',
-        category: 'Aksi',
-        keywords: 'proyek direktori pilih',
+        label: 'Open folder',
+        category: 'Action',
+        keywords: 'project directory open',
         run: () => {
           void handleChooseFolder();
         }
       },
       {
         id: 'act:sidebar-files',
-        label: 'Toggle Sidebar Files',
-        category: 'Aksi',
+        label: 'Toggle Files Sidebar',
+        category: 'Action',
         shortcut: kb.sidebarFiles,
-        keywords: 'file tree pohon berkas',
+        keywords: 'file tree explorer',
         run: () => toggleSidebarPanel('files')
       },
       {
         id: 'act:sidebar-git',
-        label: 'Toggle Sidebar Git',
-        category: 'Aksi',
+        label: 'Toggle Git Sidebar',
+        category: 'Action',
         shortcut: kb.sidebarGit,
         keywords: 'version control diff commit',
         run: () => toggleSidebarPanel('git')
       },
       {
         id: 'act:sidebar-search',
-        label: 'Toggle Sidebar Search (Cari di Proyek)',
-        category: 'Aksi',
+        label: 'Toggle Search Sidebar',
+        category: 'Action',
         shortcut: kb.sidebarSearch,
-        keywords: 'ripgrep rg grep cari teks',
+        keywords: 'ripgrep rg grep search find text',
         run: () => toggleSidebarPanel('search')
       },
       {
         id: 'act:maximize-pane',
-        label: 'Maximize / Kembalikan ukuran pane',
-        category: 'Aksi',
+        label: 'Toggle maximize pane',
+        category: 'Action',
         shortcut: kb.maximizePane,
-        keywords: 'penuh fokus perbesar',
+        keywords: 'full focus maximize restore',
         run: () => handleToggleMaximizePane(focusedPaneId)
       },
       {
         id: 'act:close-tab',
-        label: 'Tutup tab aktif',
-        category: 'Aksi',
+        label: 'Close active tab',
+        category: 'Action',
         shortcut: kb.closeTab,
         run: () => {
           if (focusedPane && activeTab) {
@@ -317,85 +317,85 @@
       },
       {
         id: 'act:close-pane',
-        label: 'Tutup pane aktif',
-        category: 'Aksi',
+        label: 'Close active pane',
+        category: 'Action',
         shortcut: kb.closePane,
         run: () => handleClosePane(focusedPaneId)
       },
       {
         id: 'act:new-workspace',
-        label: 'Workspace baru',
-        category: 'Aksi',
-        keywords: 'ruang kerja tambah',
+        label: 'New workspace',
+        category: 'Action',
+        keywords: 'workspace add',
         run: () => handleAddWorkspace()
       },
       {
         id: 'act:close-workspace',
-        label: 'Tutup workspace aktif',
-        category: 'Aksi',
-        keywords: 'ruang kerja hapus',
+        label: 'Close active workspace',
+        category: 'Action',
+        keywords: 'workspace close remove',
         run: () => handleCloseWorkspace(session.activeWorkspaceId)
       },
       {
         id: 'act:toggle-theme',
-        label: `Ganti tema ke ${settings.appearance.theme === 'dark' ? 'Light' : 'Dark'}`,
-        category: 'Aksi',
-        keywords: 'theme dark light terang gelap warna',
+        label: `Switch theme to ${settings.appearance.theme === 'dark' ? 'Light' : 'Dark'}`,
+        category: 'Action',
+        keywords: 'theme dark light color',
         run: () => toggleTheme()
       },
       {
         id: 'act:toggle-font',
-        label: `Ganti font ke ${
+        label: `Switch font to ${
           settings.appearance.fontFamily === 'system-mono'
             ? 'JetBrains Mono Nerd'
-            : 'Monospace Sistem'
+            : 'System Monospace'
         }`,
-        category: 'Aksi',
-        keywords: 'font huruf tipografi jetbrains',
+        category: 'Action',
+        keywords: 'font typography jetbrains',
         run: () => toggleFontFamily()
       },
       {
         id: 'act:zoom-in',
-        label: 'Perbesar ukuran font',
-        category: 'Aksi',
+        label: 'Zoom in font',
+        category: 'Action',
         shortcut: 'Alt+=',
         run: () => adjustCodeFontSize(1)
       },
       {
         id: 'act:zoom-out',
-        label: 'Perkecil ukuran font',
-        category: 'Aksi',
+        label: 'Zoom out font',
+        category: 'Action',
         shortcut: 'Alt+-',
         run: () => adjustCodeFontSize(-1)
       },
       {
         id: 'act:zoom-reset',
-        label: 'Reset ukuran font (14px)',
-        category: 'Aksi',
+        label: 'Reset font zoom (14px)',
+        category: 'Action',
         shortcut: 'Alt+0',
         run: () => adjustCodeFontSize('reset')
       },
       {
         id: 'act:git-pull',
-        label: 'Git: Pull dari remote',
-        category: 'Aksi',
+        label: 'Git: Pull from remote',
+        category: 'Action',
         run: () => {
           void gitPull()
             .then(() => refreshRepoStatus())
             .catch((err: AppErrorPayload) => {
-              sessionNotice = err.message ?? 'Git pull gagal';
+              sessionNotice = err.message ?? 'Git pull failed';
             });
         }
       },
       {
         id: 'act:git-push',
-        label: 'Git: Push ke remote',
-        category: 'Aksi',
+        label: 'Git: Push to remote',
+        category: 'Action',
         run: () => {
           void gitPush()
             .then(() => refreshRepoStatus())
             .catch((err: AppErrorPayload) => {
-              sessionNotice = err.message ?? 'Git push gagal';
+              sessionNotice = err.message ?? 'Git push failed';
             });
         }
       }
@@ -404,7 +404,7 @@
     for (const ws of session.workspaces) {
       entries.push({
         id: `ws:${ws.id}`,
-        label: `Pindah ke workspace ${ws.name}`,
+        label: `Switch to workspace ${ws.name}`,
         category: 'Workspace',
         run: () => {
           session.activeWorkspaceId = ws.id;
@@ -416,8 +416,8 @@
       if (recent !== projectState.activeFolder) {
         entries.push({
           id: `recent:${recent}`,
-          label: `Buka folder terakhir: ${recent}`,
-          category: 'Aksi',
+          label: `Open recent folder: ${recent}`,
+          category: 'Action',
           run: () => {
             void openFolderByPath(recent);
           }
@@ -459,7 +459,7 @@
 
       if (loadedSession.backedUpCorrupt) {
         sessionNotice =
-          'File sesi sebelumnya tidak kompatibel atau rusak dan telah dicadangkan ke session.json.bak.';
+          'Previous session file was incompatible or corrupt and has been backed up to session.json.bak.';
       } else if (loadedSettings.warnings.length > 0) {
         sessionNotice = loadedSettings.warnings[0];
       }
@@ -563,7 +563,7 @@
   function handleAddWorkspace() {
     const num = session.workspaces.length + 1;
     const wsId = nextId('ws');
-    const newWs = createInitialWorkspace(wsId, `${num} Ruang`, projectState.activeFolder ?? '');
+    const newWs = createInitialWorkspace(wsId, `${num} Workspace`, projectState.activeFolder ?? '');
     session.workspaces.push(newWs);
     session.activeWorkspaceId = wsId;
   }
@@ -702,7 +702,7 @@
       }
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMessage = normalized.message ?? 'Gagal membuka dialog folder';
+      errorMessage = normalized.message ?? 'Failed to open folder dialog';
     }
   }
 
@@ -720,7 +720,7 @@
       await Promise.all([fsWatch().catch(() => {}), refreshRepoStatus()]);
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMessage = normalized.message ?? 'Gagal membuka folder proyek';
+      errorMessage = normalized.message ?? 'Failed to open project folder';
     }
   }
 
@@ -998,13 +998,13 @@
 <div class="app-shell">
   {#if loading}
     <main class="empty-screen">
-      <p class="muted">Memuat ruang kerja...</p>
+      <p class="muted">Loading workspace...</p>
     </main>
   {:else if !projectState.activeFolder}
     <main class="empty-screen">
       <div class="welcome-card">
         <h1 class="welcome-title">glzr</h1>
-        <p class="muted">Pilih folder proyek untuk memulai ruang kerja.</p>
+        <p class="muted">Open a folder to get started.</p>
 
         {#if errorMessage}
           <p class="error-banner">{errorMessage}</p>
@@ -1013,13 +1013,13 @@
         <div class="welcome-actions">
           <button class="primary" onclick={handleChooseFolder}>
             <FolderOpen size={14} strokeWidth={2} />
-            <span>Buka folder</span>
+            <span>Open Folder</span>
           </button>
         </div>
 
         {#if projectState.recentFolders.length > 0}
           <div class="recent-section">
-            <span class="section-label">Folder terakhir</span>
+            <span class="section-label">Recent Projects</span>
             <ul class="recent-list">
               {#each projectState.recentFolders as folderPath (folderPath)}
                 <li>
@@ -1065,8 +1065,8 @@
             {#if session.workspaces.length > 1}
               <button
                 class="ws-close-btn"
-                title="Hapus workspace"
-                aria-label="Hapus workspace"
+                title="Close workspace"
+                aria-label="Close workspace"
                 onclick={(e) => {
                   e.stopPropagation();
                   handleCloseWorkspace(ws.id);
@@ -1079,8 +1079,8 @@
         {/each}
         <button
           class="icon-btn"
-          title="Workspace baru"
-          aria-label="Workspace baru"
+          title="New workspace"
+          aria-label="New workspace"
           onclick={handleAddWorkspace}
         >
           <Plus size={14} strokeWidth={2} />
@@ -1094,12 +1094,12 @@
           onclick={() => toggleSidebarPanel('files')}
         >
           <Files size={14} strokeWidth={2} />
-          <span>File</span>
+          <span>Files</span>
         </button>
         <button
           class="folder-switch"
           class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'git'}
-          title="Panel Git (Alt+V)"
+          title="Git Panel (Alt+V)"
           onclick={() => toggleSidebarPanel('git')}
         >
           <GitBranch size={14} strokeWidth={2} />
@@ -1108,23 +1108,23 @@
         <button
           class="folder-switch"
           class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'search'}
-          title="Cari di Proyek (Alt+G)"
+          title="Search in Project (Alt+G)"
           onclick={() => toggleSidebarPanel('search')}
         >
           <Search size={14} strokeWidth={2} />
-          <span>Cari</span>
+          <span>Search</span>
         </button>
         <button
           class="folder-switch"
           title="Command Palette (Alt+P)"
           onclick={() => (commandPaletteVisible = true)}
         >
-          <span>Perintah</span>
+          <span>Commands</span>
         </button>
         <button
           class="icon-btn"
-          title="Ganti tema ({settings.appearance.theme === 'dark' ? 'Light' : 'Dark'})"
-          aria-label="Ganti tema"
+          title="Toggle theme ({settings.appearance.theme === 'dark' ? 'Light' : 'Dark'})"
+          aria-label="Toggle theme"
           onclick={toggleTheme}
         >
           {#if settings.appearance.theme === 'dark'}
@@ -1143,7 +1143,7 @@
     {#if sessionNotice}
       <div class="session-notice-bar">
         <span>{sessionNotice}</span>
-        <button class="small-btn" onclick={() => (sessionNotice = null)}>Tutup</button>
+        <button class="small-btn" onclick={() => (sessionNotice = null)}>Close</button>
       </div>
     {/if}
 
@@ -1280,7 +1280,7 @@
 
     <footer class="status-bar">
       <div class="status-left">
-        <span>{projectState.folderName ?? 'proyek'}</span>
+        <span>{projectState.folderName ?? 'project'}</span>
         {#if repoStatus?.isRepo}
           <span class="status-branch">
             <GitBranch size={12} strokeWidth={2} />
@@ -1323,13 +1323,13 @@
 
     {#if pendingClose}
       <div class="modal-backdrop">
-        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-label="Konfirmasi simpan">
-          <h2 class="confirm-title">Simpan perubahan sebelum menutup?</h2>
-          <p class="muted">Perubahan yang belum disimpan akan hilang jika tab ditutup.</p>
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-label="Confirm save">
+          <h2 class="confirm-title">Save changes before closing?</h2>
+          <p class="muted">Unsaved changes will be lost if the tab is closed.</p>
           <div class="confirm-actions">
-            <button class="primary" onclick={handleConfirmSaveAndClose}>Simpan</button>
-            <button class="danger" onclick={handleDiscardAndClose}>Buang</button>
-            <button onclick={() => (pendingClose = null)}>Batal</button>
+            <button class="primary" onclick={handleConfirmSaveAndClose}>Save</button>
+            <button class="danger" onclick={handleDiscardAndClose}>Discard</button>
+            <button onclick={() => (pendingClose = null)}>Cancel</button>
           </div>
         </div>
       </div>

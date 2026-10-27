@@ -136,7 +136,7 @@
     } catch (err) {
       if (activeQueryId === qid) {
         const normalized = err as AppErrorPayload;
-        errorMsg = normalized.message ?? 'Gagal memulai pencarian proyek';
+        errorMsg = normalized.message ?? 'Failed to start project search';
         searching = false;
       }
     }
@@ -186,9 +186,9 @@
 
 <aside class="search-panel">
   <div class="panel-header">
-    <span class="panel-title">Pencarian Proyek</span>
+    <span class="panel-title">Search</span>
     {#if results.length > 0}
-      <span class="count-label mono">{results.length} hasil</span>
+      <span class="count-label mono">{results.length} results</span>
     {/if}
   </div>
 
@@ -200,14 +200,14 @@
         bind:value={pattern}
         type="text"
         class="search-input"
-        placeholder="Cari teks di proyek..."
+        placeholder="Search text in project..."
         oninput={scheduleSearch}
       />
       {#if pattern}
         <button
           class="clear-btn"
-          title="Bersihkan pencarian"
-          aria-label="Bersihkan pencarian"
+          title="Clear search"
+          aria-label="Clear search"
           onclick={() => {
             pattern = '';
             scheduleSearch();
@@ -223,14 +223,14 @@
         bind:value={globFilter}
         type="text"
         class="glob-input mono"
-        placeholder="Filter glob (mis. *.rs, src/**)"
+        placeholder="Include glob (e.g. *.rs, src/**)"
         oninput={scheduleSearch}
       />
       <div class="option-toggles">
         <button
           class="opt-btn mono"
           class:active={caseSensitive}
-          title="Huruf besar/kecil (Case Sensitive)"
+          title="Match Case"
           onclick={() => {
             caseSensitive = !caseSensitive;
             scheduleSearch();
@@ -241,7 +241,7 @@
         <button
           class="opt-btn mono"
           class:active={regexMode}
-          title="Ekspresi Reguler (Regex)"
+          title="Use Regular Expression"
           onclick={() => {
             regexMode = !regexMode;
             scheduleSearch();
@@ -261,7 +261,7 @@
 
   {#if truncated}
     <div class="truncated-banner">
-      <span>Hasil dipotong pada batas 2.000 baris.</span>
+      <span>Results truncated at 2,000 matches.</span>
     </div>
   {/if}
 
@@ -273,11 +273,11 @@
     }}
   >
     {#if !pattern.trim()}
-      <div class="empty-box">Ketik kata kunci untuk mencari di seluruh proyek</div>
+      <div class="empty-box">Type a keyword to search across the project</div>
     {:else if searching && results.length === 0}
-      <div class="empty-box">Mencari...</div>
+      <div class="empty-box">Searching...</div>
     {:else if !searching && results.length === 0 && !errorMsg}
-      <div class="empty-box">Tidak ada hasil yang cocok</div>
+      <div class="empty-box">No matching results found</div>
     {:else}
       <div class="virtual-spacer" style:height="{totalHeight}px">
         {#each visibleSlice as row, idx (row.key)}

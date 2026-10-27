@@ -70,7 +70,7 @@
       }
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memuat status Git';
+      errorMsg = normalized.message ?? 'Failed to load Git status';
     } finally {
       loading = false;
     }
@@ -88,7 +88,7 @@
       await refresh();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Operasi Git gagal';
+      errorMsg = normalized.message ?? 'Git operation failed';
     } finally {
       busy = false;
     }
@@ -124,13 +124,13 @@
 
 <aside class="git-panel">
   <div class="panel-header">
-    <span class="panel-title">Perubahan ({totalChanges})</span>
+    <span class="panel-title">Changes ({totalChanges})</span>
     <div class="header-actions">
       {#if statusData?.isRepo}
         <button
           class="icon-btn"
-          title="Git Pull"
-          aria-label="Git Pull"
+          title="Pull"
+          aria-label="Pull"
           disabled={busy}
           onclick={() => runAction(() => gitPull())}
         >
@@ -138,8 +138,8 @@
         </button>
         <button
           class="icon-btn"
-          title="Git Push"
-          aria-label="Git Push"
+          title="Push"
+          aria-label="Push"
           disabled={busy}
           onclick={() => runAction(() => gitPush())}
         >
@@ -148,8 +148,8 @@
       {/if}
       <button
         class="icon-btn"
-        title="Segarkan status Git"
-        aria-label="Segarkan status Git"
+        title="Refresh Git status"
+        aria-label="Refresh Git status"
         disabled={busy}
         onclick={() => refresh()}
       >
@@ -160,15 +160,15 @@
 
   {#if loading}
     <div class="empty-state">
-      <p class="muted">Memuat status Git...</p>
+      <p class="muted">Loading Git status...</p>
     </div>
   {:else if !statusData?.gitAvailable}
     <div class="empty-state">
-      <p class="muted">Git tidak terpasang di sistem.</p>
+      <p class="muted">Git is not installed on system.</p>
     </div>
   {:else if !statusData.isRepo}
     <div class="empty-state">
-      <p class="muted">Folder proyek ini bukan repositori Git.</p>
+      <p class="muted">This folder is not a Git repository.</p>
     </div>
   {:else}
     <div class="branch-bar">
@@ -187,7 +187,7 @@
           </select>
         {:else}
           <span class="branch-label">
-            {statusData.detached ? 'HEAD terlepas' : (statusData.branch ?? 'main')}
+            {statusData.detached ? 'Detached HEAD' : (statusData.branch ?? 'main')}
           </span>
         {/if}
       </div>
@@ -200,11 +200,11 @@
     {#if statusData.merging || statusData.rebasing || statusData.detached || statusData.hasConflicts}
       <div class="state-banner">
         {#if statusData.rebasing}
-          <span>Rebase sedang berjalan. Selesaikan lewat terminal.</span>
+          <span>Rebase in progress. Resolve via terminal.</span>
         {:else if statusData.merging || statusData.hasConflicts}
-          <span>Merge conflict terdeteksi. Selesaikan konflik lewat terminal.</span>
+          <span>Merge conflicts detected. Resolve conflicts via terminal.</span>
         {:else if statusData.detached}
-          <span>Detached HEAD aktif.</span>
+          <span>Detached HEAD mode.</span>
         {/if}
       </div>
     {/if}
@@ -218,7 +218,7 @@
     <div class="changes-scroll">
       {#if statusData.conflicted.length > 0}
         <div class="group-section">
-          <div class="group-title">Konflik ({statusData.conflicted.length})</div>
+          <div class="group-title">Conflicts ({statusData.conflicted.length})</div>
           {#each statusData.conflicted as item (item.path)}
             <div class="file-row">
               <button class="file-main" onclick={() => onOpenDiff?.(item.path, false)}>
@@ -231,9 +231,9 @@
       {/if}
 
       <div class="group-section">
-        <div class="group-title">Staged ({statusData.staged.length})</div>
+        <div class="group-title">Staged Changes ({statusData.staged.length})</div>
         {#if statusData.staged.length === 0}
-          <div class="group-empty">Belum ada file di-stage</div>
+          <div class="group-empty">No staged changes</div>
         {:else}
           {#each statusData.staged as item (item.path)}
             <div class="file-row">
@@ -258,9 +258,9 @@
       </div>
 
       <div class="group-section">
-        <div class="group-title">Perubahan ({unstagedAll.length})</div>
+        <div class="group-title">Changes ({unstagedAll.length})</div>
         {#if unstagedAll.length === 0}
-          <div class="group-empty">Tidak ada perubahan kerja</div>
+          <div class="group-empty">No changes</div>
         {:else}
           {#each unstagedAll as item (item.path)}
             <div class="file-row">
@@ -280,8 +280,8 @@
                 </button>
                 <button
                   class="row-btn"
-                  title="Buang perubahan file"
-                  aria-label="Buang perubahan file"
+                  title="Discard file changes"
+                  aria-label="Discard file changes"
                   disabled={busy}
                   onclick={() => (confirmDiscardPath = item.path)}
                 >
@@ -297,11 +297,11 @@
     {#if confirmDiscardPath}
       <div class="discard-confirm-box">
         <p class="discard-text">
-          Buang perubahan pada <span class="mono">{confirmDiscardPath}</span>?
+          Discard changes in <span class="mono">{confirmDiscardPath}</span>?
         </p>
         <div class="discard-actions">
-          <button class="danger small-btn" onclick={handleConfirmDiscard}>Buang</button>
-          <button class="small-btn" onclick={() => (confirmDiscardPath = null)}>Batal</button>
+          <button class="danger small-btn" onclick={handleConfirmDiscard}>Discard</button>
+          <button class="small-btn" onclick={() => (confirmDiscardPath = null)}>Cancel</button>
         </div>
       </div>
     {/if}
@@ -312,7 +312,7 @@
         bind:value={commitMessage}
         type="text"
         class="commit-input"
-        placeholder="Pesan commit..."
+        placeholder="Commit message (Ctrl+Enter to commit)..."
         onkeydown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();

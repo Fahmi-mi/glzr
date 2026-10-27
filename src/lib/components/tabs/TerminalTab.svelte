@@ -111,7 +111,7 @@
       term.focus();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memulai sesi terminal';
+      errorMsg = normalized.message ?? 'Failed to start terminal session';
     }
   }
 
@@ -317,7 +317,7 @@
         bind:value={searchQuery}
         type="text"
         class="search-input"
-        placeholder="Cari di terminal..."
+        placeholder="Find in terminal..."
         onkeydown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -335,7 +335,7 @@
       />
       <button
         class="icon-btn"
-        aria-label="Tutup pencarian"
+        aria-label="Close search"
         onclick={() => {
           searchOpen = false;
           term?.focus();
@@ -349,18 +349,16 @@
   {#if errorMsg}
     <div class="terminal-banner error">
       <span>{errorMsg}</span>
-      <button class="small-btn" onclick={restartSession}>Coba lagi</button>
+      <button class="small-btn" onclick={restartSession}>Retry</button>
     </div>
   {/if}
 
   {#if pendingLargePaste}
     <div class="terminal-banner warning">
-      <span
-        >Teks yang ditempel berukuran besar (lebih dari 64 KB). Lanjutkan tempel ke terminal?</span
-      >
+      <span>Pasted text is very large (> 64 KB). Proceed with pasting to terminal?</span>
       <div class="banner-actions">
-        <button class="primary small-btn" onclick={confirmLargePaste}>Tempel</button>
-        <button class="small-btn" onclick={() => (pendingLargePaste = null)}>Batal</button>
+        <button class="primary small-btn" onclick={confirmLargePaste}>Paste</button>
+        <button class="small-btn" onclick={() => (pendingLargePaste = null)}>Cancel</button>
       </div>
     </div>
   {/if}
@@ -371,7 +369,7 @@
     <div class="detected-url-pill">
       <button
         class="open-preview-btn"
-        title="Buka di tab preview"
+        title="Open in preview tab"
         onclick={() => {
           if (detectedLocalUrl) {
             onOpenLocalhost(detectedLocalUrl);
@@ -384,7 +382,7 @@
       </button>
       <button
         class="dismiss-pill-btn"
-        aria-label="Sembunyikan notifikasi port"
+        aria-label="Dismiss port notification"
         onclick={() => (detectedLocalUrl = null)}
       >
         <X size={11} strokeWidth={2} />
@@ -394,10 +392,10 @@
 
   {#if exited}
     <div class="terminal-banner exited">
-      <span>Proses selesai{exitCode !== null ? ` (kode keluar ${exitCode})` : ''}.</span>
+      <span>Process completed{exitCode !== null ? ` (exit code ${exitCode})` : ''}.</span>
       <button class="primary small-btn" onclick={restartSession}>
         <RotateCcw size={12} strokeWidth={2} />
-        <span>Mulai ulang</span>
+        <span>Restart</span>
       </button>
     </div>
   {/if}

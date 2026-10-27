@@ -127,7 +127,7 @@
   function handleUrlSubmit() {
     const normalized = normalizePreviewUrl(urlInput);
     if (!normalized) {
-      validationError = 'Hanya http(s)://localhost atau 127.0.0.1 yang diizinkan.';
+      validationError = 'Only http(s)://localhost or 127.0.0.1 is allowed.';
       return;
     }
     history = pushPreviewHistory(history, normalized);
@@ -185,8 +185,8 @@
       <div class="nav-controls">
         <button
           class="icon-btn"
-          title="Kembali"
-          aria-label="Kembali"
+          title="Back"
+          aria-label="Back"
           disabled={!canGoBack}
           onclick={() => handleStepHistory(-1)}
         >
@@ -194,8 +194,8 @@
         </button>
         <button
           class="icon-btn"
-          title="Maju"
-          aria-label="Maju"
+          title="Forward"
+          aria-label="Forward"
           disabled={!canGoForward}
           onclick={() => handleStepHistory(1)}
         >
@@ -203,8 +203,8 @@
         </button>
         <button
           class="icon-btn"
-          title="Muat ulang (Ctrl+R)"
-          aria-label="Muat ulang"
+          title="Reload (Ctrl+R)"
+          aria-label="Reload"
           onclick={reloadPreview}
         >
           <RotateCw size={13} strokeWidth={2} />
@@ -217,7 +217,7 @@
         type="text"
         class="url-input"
         placeholder="localhost:5173"
-        aria-label="URL preview localhost"
+        aria-label="Localhost preview URL"
         onkeydown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -232,8 +232,8 @@
 
       <button
         class="icon-btn"
-        title="Buka di browser"
-        aria-label="Buka di browser"
+        title="Open in browser"
+        aria-label="Open in browser"
         onclick={handleOpenInBrowser}
       >
         <ExternalLink size={14} strokeWidth={2} />
@@ -248,10 +248,10 @@
   <div class="preview-stage">
     {#if serverOnline === false}
       <div class="offline-card">
-        <p class="offline-title">Server belum berjalan di {hostLabel}</p>
+        <p class="offline-title">Server not running at {hostLabel}</p>
         <div class="offline-actions">
-          <button class="primary" onclick={reloadPreview}>Coba lagi</button>
-          <button onclick={handleOpenInBrowser}>Buka di browser</button>
+          <button class="primary" onclick={reloadPreview}>Retry</button>
+          <button onclick={handleOpenInBrowser}>Open in browser</button>
         </div>
       </div>
     {:else}

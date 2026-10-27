@@ -4,7 +4,7 @@ import { createInitialSession, createInitialWorkspace } from './layout/types';
 
 describe('core foundation types and ipc error normalization', () => {
   it('creates initial workspace with one pane and one terminal tab', () => {
-    const ws = createInitialWorkspace('ws-1', '1 Utama', '/home/user/project');
+    const ws = createInitialWorkspace('ws-1', '1 Main', '/home/user/project');
     expect(ws.id).toBe('ws-1');
     expect(ws.root.type).toBe('pane');
     if (ws.root.type === 'pane') {

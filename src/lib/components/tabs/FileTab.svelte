@@ -236,7 +236,7 @@
       return true;
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      saveErrorMsg = normalized.message ?? 'Gagal menyimpan file';
+      saveErrorMsg = normalized.message ?? 'Failed to save file';
       return false;
     }
   }
@@ -379,7 +379,7 @@
     } catch (err) {
       if (token !== activeLoadToken) return;
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal membaca file';
+      errorMsg = normalized.message ?? 'Failed to read file';
       fileData = null;
     } finally {
       if (token === activeLoadToken) {
@@ -411,7 +411,7 @@
       await openExternal(path);
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      saveErrorMsg = normalized.message ?? 'Gagal membuka aplikasi luar';
+      saveErrorMsg = normalized.message ?? 'Failed to open external application';
     }
   }
 
@@ -495,7 +495,7 @@
 <div class="file-tab-container">
   {#if loading}
     <div class="state-box">
-      <p class="muted">Memuat file...</p>
+      <p class="muted">Loading file...</p>
     </div>
   {:else if errorMsg}
     <div class="state-box">
@@ -504,21 +504,21 @@
   {:else if fileData}
     {#if fileData.kind === 'svg'}
       <div class="sub-bar">
-        <span class="sub-bar-label">Mode SVG</span>
+        <span class="sub-bar-label">SVG Mode</span>
         <div class="segmented-switch">
           <button
             class="seg-btn"
             class:active={svgMode === 'preview'}
             onclick={() => (svgMode = 'preview')}
           >
-            Gambar
+            Preview
           </button>
           <button
             class="seg-btn"
             class:active={svgMode === 'code'}
             onclick={() => (svgMode = 'code')}
           >
-            Kode
+            Code
           </button>
         </div>
       </div>
@@ -526,28 +526,28 @@
 
     {#if fileData.encoding === 'non-utf8' && (fileData.kind === 'text' || fileData.kind === 'svg')}
       <div class="notice-bar warning">
-        <span>File memiliki encoding non-UTF-8 dan dibuka dalam mode baca-saja.</span>
+        <span>File has non-UTF-8 encoding and is opened in read-only mode.</span>
       </div>
     {/if}
 
     {#if fileData.disableHighlight && (fileData.kind === 'text' || fileData.kind === 'svg')}
       <div class="notice-bar">
-        <span>Syntax highlight dinonaktifkan untuk menjaga performa file besar.</span>
+        <span>Syntax highlighting disabled for large file performance.</span>
       </div>
     {/if}
 
     {#if externalConflict}
       <div class="notice-bar warning">
-        <span>File ini berubah di disk dari luar editor.</span>
+        <span>This file was modified on disk outside the editor.</span>
         <div class="notice-actions">
-          <button class="primary small-btn" onclick={() => void save()}>Simpan milikku</button>
+          <button class="primary small-btn" onclick={() => void save()}>Keep Mine</button>
           <button
             class="small-btn"
             onclick={() => {
               if (externalConflict) applyExternalReload(externalConflict);
             }}
           >
-            Muat ulang
+            Reload
           </button>
         </div>
       </div>
@@ -555,10 +555,10 @@
 
     {#if pendingDraft && (fileData.kind === 'text' || (fileData.kind === 'svg' && svgMode === 'code'))}
       <div class="notice-bar draft">
-        <span>Draf belum disimpan ditemukan untuk file ini.</span>
+        <span>An unsaved draft was found for this file.</span>
         <div class="notice-actions">
-          <button class="primary small-btn" onclick={applyDraft}>Pulihkan draf</button>
-          <button class="small-btn" onclick={discardDraft}>Abaikan</button>
+          <button class="primary small-btn" onclick={applyDraft}>Restore Draft</button>
+          <button class="small-btn" onclick={discardDraft}>Discard</button>
         </div>
       </div>
     {/if}
@@ -571,10 +571,10 @@
 
     {#if fileData.kind === 'binary'}
       <div class="state-box">
-        <p class="muted">File biner tidak dapat ditampilkan di editor.</p>
+        <p class="muted">Binary file cannot be displayed in the editor.</p>
         <button onclick={handleOpenExternal}>
           <ExternalLink size={14} strokeWidth={2} />
-          <span>Buka di aplikasi luar</span>
+          <span>Open in default application</span>
         </button>
       </div>
     {:else if fileData.kind === 'image' || (fileData.kind === 'svg' && svgMode === 'preview')}

@@ -336,7 +336,7 @@ pub fn load_settings_from_path(path: &Path) -> AppResult<SettingsLoadDto> {
             return Ok(SettingsLoadDto {
                 settings: AppSettings::default(),
                 warnings: vec![
-                    "Gagal membaca settings.toml; menggunakan pengaturan bawaan.".to_string(),
+                    "Failed to read settings.toml; using default settings.".to_string(),
                 ],
             });
         }
@@ -421,7 +421,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
         Ok(v) => v,
         Err(_) => {
             warnings.push(
-                "File settings.toml rusak dan tidak dapat diurai; menggunakan pengaturan bawaan."
+                "Corrupt settings.toml cannot be parsed; using default settings."
                     .to_string(),
             );
             return SettingsLoadDto { settings, warnings };
@@ -429,7 +429,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
     };
 
     let Some(table) = root.as_table() else {
-        warnings.push("Format settings.toml tidak valid.".to_string());
+        warnings.push("Invalid settings.toml format.".to_string());
         return SettingsLoadDto { settings, warnings };
     };
 
@@ -439,7 +439,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
                 settings.appearance.theme = theme_val.to_string();
             } else {
                 warnings.push(format!(
-                    "appearance.theme '{}' tidak valid; memakai default 'dark'.",
+                    "appearance.theme '{}' is invalid; using default 'dark'.",
                     theme_val
                 ));
             }
@@ -449,7 +449,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
                 settings.appearance.font_family = font_val.to_string();
             } else {
                 warnings.push(format!(
-                    "appearance.font_family '{}' tidak valid; memakai default 'system-mono'.",
+                    "appearance.font_family '{}' is invalid; using default 'system-mono'.",
                     font_val
                 ));
             }
@@ -459,7 +459,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
                 settings.appearance.font_size = size_val as u16;
             } else {
                 warnings.push(format!(
-                    "appearance.font_size '{}' di luar rentang 10..28; memakai default 14.",
+                    "appearance.font_size '{}' is outside the range 10..28; using default 14.",
                     size_val
                 ));
             }
@@ -471,7 +471,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
             if (1..=16).contains(&ts) {
                 settings.editor.tab_size = ts as u8;
             } else {
-                warnings.push("editor.tab_size di luar rentang 1..16; memakai default 4.".into());
+                warnings.push("editor.tab_size is outside the range 1..16; using default 4.".into());
             }
         }
         if let Some(ins) = ed_tbl.get("insert_spaces").and_then(|v| v.as_bool()) {
@@ -530,13 +530,13 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
         let normalized = combo.to_ascii_lowercase();
         if !seen.insert(normalized.clone()) {
             warnings.push(format!(
-                "Keybinding duplikat terdeteksi pada '{}': {}",
+                "Duplicate keybinding detected on '{}': {}",
                 name, combo
             ));
         }
         if normalized.starts_with("ctrl+") && !normalized.starts_with("ctrl+shift+") {
             warnings.push(format!(
-                "Keybinding '{}' ({}) memakai Ctrl+huruf yang tidak aktif saat fokus di terminal.",
+                "Keybinding '{}' ({}) uses Ctrl+letter which is inactive when terminal is focused.",
                 name, combo
             ));
         }
@@ -574,7 +574,7 @@ quick_open = "Alt+P"
         assert!(dto
             .warnings
             .iter()
-            .any(|w| w.contains("Keybinding duplikat")));
+            .any(|w| w.contains("Duplicate keybinding")));
     }
 
     #[test]

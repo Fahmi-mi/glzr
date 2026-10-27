@@ -257,13 +257,13 @@
               {/if}
               <span>{tab.title}</span>
               {#if dirtyTabs[tab.id]}
-                <span class="dirty-dot" aria-label="Belum disimpan"></span>
+                <span class="dirty-dot" aria-label="Unsaved"></span>
               {/if}
             </button>
             <button
               class="tab-close-btn"
-              title="Tutup tab (Alt+W)"
-              aria-label="Tutup tab"
+              title="Close tab (Alt+W)"
+              aria-label="Close tab"
               onclick={(e) => {
                 e.stopPropagation();
                 onCloseTab(node.id, tab.id);
@@ -277,8 +277,8 @@
         <div class="new-tab-dropdown">
           <button
             class="icon-btn"
-            title="Menu tab dan split"
-            aria-label="Menu tab dan split"
+            title="Tab and split options"
+            aria-label="Tab and split options"
             onclick={(e) => {
               e.stopPropagation();
               onFocusPane(node.id);
@@ -297,7 +297,7 @@
                 }}
               >
                 <FileText size={14} strokeWidth={2} />
-                <span>Buka file...</span>
+                <span>Open file...</span>
               </button>
               <button
                 class="dropdown-item"
@@ -307,7 +307,7 @@
                 }}
               >
                 <Terminal size={14} strokeWidth={2} />
-                <span>Terminal baru</span>
+                <span>New terminal</span>
               </button>
               <button
                 class="dropdown-item"
@@ -317,7 +317,7 @@
                 }}
               >
                 <Globe size={14} strokeWidth={2} />
-                <span>Preview localhost</span>
+                <span>New preview</span>
               </button>
               <button
                 class="dropdown-item"
@@ -327,7 +327,7 @@
                 }}
               >
                 <Columns2 size={14} strokeWidth={2} />
-                <span>Split kanan</span>
+                <span>Split right</span>
               </button>
               <button
                 class="dropdown-item"
@@ -337,7 +337,7 @@
                 }}
               >
                 <Rows2 size={14} strokeWidth={2} />
-                <span>Split bawah</span>
+                <span>Split down</span>
               </button>
             </div>
           {/if}
@@ -347,16 +347,16 @@
       <div class="pane-tools">
         <button
           class="icon-btn"
-          title="Split kanan (Alt+R)"
-          aria-label="Split kanan"
+          title="Split right (Alt+R)"
+          aria-label="Split right"
           onclick={() => onSplitPane(node.id, 'row')}
         >
           <Columns2 size={13} strokeWidth={2} />
         </button>
         <button
           class="icon-btn"
-          title="Split bawah (Alt+J)"
-          aria-label="Split bawah"
+          title="Split down (Alt+J)"
+          aria-label="Split down"
           onclick={() => onSplitPane(node.id, 'column')}
         >
           <Rows2 size={13} strokeWidth={2} />
@@ -422,15 +422,15 @@
         {/if}
       {:else}
         <div class="empty-pane-card">
-          <p class="muted">Pane kosong</p>
+          <p class="muted">Empty pane</p>
           <div class="empty-pane-actions">
             <button class="primary" onclick={() => onAddTerminalTab(node.id)}>
               <Terminal size={14} strokeWidth={2} />
-              <span>Terminal baru</span>
+              <span>New terminal</span>
             </button>
             <button onclick={() => onRequestQuickOpen(node.id)}>
               <FileText size={14} strokeWidth={2} />
-              <span>Buka file</span>
+              <span>Open file</span>
             </button>
           </div>
         </div>

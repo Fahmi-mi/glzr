@@ -507,23 +507,23 @@ fn parse_localhost_target(raw_url: &str) -> AppResult<(String, u16)> {
         ("https", after)
     } else {
         return Err(AppError::Validation(
-            "URL preview harus menggunakan http:// atau https://".into(),
+            "Preview URL must use http:// or https://".into(),
         ));
     };
 
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("").trim();
 
     if authority.is_empty() {
-        return Err(AppError::Validation("Host preview kosong".into()));
+        return Err(AppError::Validation("Preview host is empty".into()));
     }
 
     let default_port = if scheme == "https" { 443 } else { 80 };
     let (host, port) = if let Some((h, p_str)) = authority.split_once(':') {
         let parsed_port = p_str
             .parse::<u16>()
-            .map_err(|_| AppError::Validation(format!("Port preview tidak valid: {}", p_str)))?;
+            .map_err(|_| AppError::Validation(format!("Invalid preview port: {}", p_str)))?;
         if parsed_port == 0 {
-            return Err(AppError::Validation("Port preview tidak boleh 0".into()));
+            return Err(AppError::Validation("Preview port cannot be 0".into()));
         }
         (h.to_ascii_lowercase(), parsed_port)
     } else {
@@ -532,7 +532,7 @@ fn parse_localhost_target(raw_url: &str) -> AppResult<(String, u16)> {
 
     if host != "localhost" && host != "127.0.0.1" {
         return Err(AppError::Validation(format!(
-            "Host preview tidak diizinkan: {}",
+            "Preview host not allowed: {}",
             host
         )));
     }

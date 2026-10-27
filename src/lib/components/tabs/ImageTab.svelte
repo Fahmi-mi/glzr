@@ -31,7 +31,7 @@
       dataUrl = await fsReadImageDataUrl(targetPath);
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memuat gambar';
+      errorMsg = normalized.message ?? 'Failed to load image';
     } finally {
       loading = false;
     }
@@ -54,7 +54,7 @@
 
 <div class="image-viewer">
   {#if loading}
-    <p class="muted">Memuat gambar...</p>
+    <p class="muted">Loading image...</p>
   {:else if errorMsg}
     <p class="error-text">{errorMsg}</p>
   {:else if dataUrl}

@@ -135,7 +135,7 @@
           bind:value={query}
           type="text"
           class="palette-input"
-          placeholder="Ketik perintah atau nama file..."
+          placeholder="Type a command or file name..."
           oninput={() => {
             selectedIndex = 0;
           }}
@@ -144,7 +144,7 @@
 
       <ul class="palette-list">
         {#if combinedEntries.length === 0}
-          <li class="empty-row">Tidak ada perintah atau file yang cocok</li>
+          <li class="empty-row">No matching commands or files</li>
         {:else}
           {#each combinedEntries as item, i (item.id)}
             <li>

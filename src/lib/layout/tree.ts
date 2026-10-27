@@ -459,7 +459,12 @@ export function migrateAndSanitizeSession(
     if (typeof item !== 'object' || item === null) continue;
     const wObj = item as Record<string, unknown>;
     const id = typeof wObj.id === 'string' && wObj.id.trim() ? wObj.id : `ws-${i + 1}`;
-    const name = typeof wObj.name === 'string' && wObj.name.trim() ? wObj.name : `${i + 1} Ruang`;
+    let name = typeof wObj.name === 'string' && wObj.name.trim() ? wObj.name : `${i + 1} Workspace`;
+    if (name === '1 Utama') {
+      name = '1 Main';
+    } else if (name === `${i + 1} Ruang`) {
+      name = `${i + 1} Workspace`;
+    }
     const root = sanitizeLayoutNode(wObj.root, folder ?? '', counter);
     if (root) {
       workspaces.push({ id, name, root });
@@ -467,7 +472,7 @@ export function migrateAndSanitizeSession(
   }
 
   if (workspaces.length === 0) {
-    workspaces.push(createInitialWorkspace('ws-1', '1 Utama', folder ?? ''));
+    workspaces.push(createInitialWorkspace('ws-1', '1 Main', folder ?? ''));
   }
 
   const requestedWs =
