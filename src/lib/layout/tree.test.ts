@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   closePane,
   findDirectionalNeighborPane,
+  getNextWorkspaceNumber,
   listAllPanes,
   migrateAndSanitizeSession,
   moveTabBetweenPanes,
@@ -12,7 +13,7 @@ import { createInitialWorkspace, type Tab } from './types';
 
 describe('layout tree pure operations and session migration', () => {
   it('splits a pane, updates split ratio, and collapses split when a pane is closed', () => {
-    const ws = createInitialWorkspace('ws-1', '1 Utama', '/tmp/proj');
+    const ws = createInitialWorkspace('ws-1', '1 Main', '/tmp/proj');
     const newTab: Tab = {
       id: 'tab-2',
       kind: 'terminal',
@@ -37,7 +38,7 @@ describe('layout tree pure operations and session migration', () => {
   });
 
   it('moves tabs between panes and resolves directional neighbor panes', () => {
-    const ws = createInitialWorkspace('ws-1', '1 Utama', '/tmp/proj');
+    const ws = createInitialWorkspace('ws-1', '1 Main', '/tmp/proj');
     const tab2: Tab = {
       id: 'tab-2',
       kind: 'file',
@@ -111,5 +112,57 @@ describe('layout tree pure operations and session migration', () => {
     expect(panes[0].tabs[0].id).toBe('t-file');
     expect(panes[1].tabs).toHaveLength(1);
     expect(panes[1].tabs[0].kind).toBe('terminal');
+  });
+
+  it('migrates legacy Indonesian default workspace names to English', () => {
+    const legacySession = {
+      version: 1,
+      folder: '/tmp/legacy',
+      sidebar: { visible: true, panel: 'files', width: 264 },
+      activeWorkspaceId: 'ws-1',
+      workspaces: [
+        {
+          id: 'ws-1',
+          name: '1 Utama',
+          root: {
+            type: 'pane',
+            id: 'p-1',
+            activeTabId: 't-1',
+            tabs: [{ id: 't-1', kind: 'terminal', title: 'terminal', data: {} }]
+          }
+        },
+        {
+          id: 'ws-2',
+          name: '2 Ruang',
+          root: {
+            type: 'pane',
+            id: 'p-2',
+            activeTabId: 't-2',
+            tabs: [{ id: 't-2', kind: 'terminal', title: 'terminal', data: {} }]
+          }
+        }
+      ]
+    };
+
+    const sanitized = migrateAndSanitizeSession(legacySession, '/tmp/legacy');
+    expect(sanitized.workspaces[0].name).toBe('1 Main');
+    expect(sanitized.workspaces[1].name).toBe('2 Workspace');
+  });
+
+  it('determines the next sequential workspace number correctly', () => {
+    // Initial single workspace with default name
+    expect(getNextWorkspaceNumber([{ name: '1' }])).toBe(2);
+
+    // Sequential numerical workspaces
+    expect(getNextWorkspaceNumber([{ name: '1' }, { name: '2' }])).toBe(3);
+
+    // Renamed workspace without numeric digits
+    expect(getNextWorkspaceNumber([{ name: 'Backend' }])).toBe(2);
+
+    // Renamed workspace along with sequential numbered workspace
+    expect(getNextWorkspaceNumber([{ name: 'Backend' }, { name: '2' }])).toBe(3);
+
+    // Gapped workspace numbers
+    expect(getNextWorkspaceNumber([{ name: '1' }, { name: '3' }])).toBe(4);
   });
 });

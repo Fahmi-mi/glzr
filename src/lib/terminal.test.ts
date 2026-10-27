@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clampTerminalFontSize,
   extractLocalhostUrl,
+  getTerminalTheme,
   isLargePaste,
   resolveTerminalKey
 } from './terminal';
@@ -78,5 +79,19 @@ describe('terminal key handling spike', () => {
 
     expect(extractLocalhostUrl('http://localhost:5173/')).toBe('http://localhost:5173/');
     expect(extractLocalhostUrl('https://example.com')).toBeNull();
+  });
+
+  it('provides distinct palettes for dark and light terminal themes', () => {
+    const dark = getTerminalTheme('dark');
+    const light = getTerminalTheme('light');
+
+    expect(dark.background).toBe('#121316');
+    expect(dark.foreground).toBe('#e6e7ea');
+
+    expect(light.background).toBe('#fbfbfc');
+    expect(light.foreground).toBe('#1b1d22');
+
+    expect(dark.background).not.toBe(light.background);
+    expect(dark.foreground).not.toBe(light.foreground);
   });
 });

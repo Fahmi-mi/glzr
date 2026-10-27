@@ -122,7 +122,7 @@ export function resolveGlobalShortcut(
 export interface PaletteEntry {
   id: string;
   label: string;
-  category: 'File' | 'Aksi' | 'Workspace';
+  category: 'File' | 'Action' | 'Workspace';
   shortcut?: string;
   keywords?: string;
   run: () => void;
@@ -143,7 +143,7 @@ export function filterPaletteEntries(entries: PaletteEntry[], query: string): Pa
 
     if (idx !== -1) {
       let score = idx * 2 + labelLower.length * 0.1;
-      if (entry.category === 'Aksi') score -= 4;
+      if (entry.category === 'Action') score -= 4;
       scored.push({ entry, score });
     } else if (kwIdx !== -1) {
       scored.push({ entry, score: 40 + kwIdx });

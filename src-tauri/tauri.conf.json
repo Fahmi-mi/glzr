@@ -17,7 +17,8 @@
         "height": 800,
         "minWidth": 800,
         "minHeight": 500,
-        "decorations": true
+        "decorations": true,
+        "devtools": true
       }
     ],
     "security": {
@@ -39,6 +40,18 @@
       "deb": {
         "depends": ["git"]
       }
+    }
+  },
+  "plugins": {
+    "cli": {
+      "description": "glzr - terminal-first workspace for Linux",
+      "args": [
+        {
+          "name": "folder",
+          "index": 1,
+          "description": "Folder path to open"
+        }
+      ]
     }
   }
 }

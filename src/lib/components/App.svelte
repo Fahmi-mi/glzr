@@ -1,11 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import Files from '@lucide/svelte/icons/files';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import Moon from '@lucide/svelte/icons/moon';
   import Plus from '@lucide/svelte/icons/plus';
-  import Search from '@lucide/svelte/icons/search';
   import Sun from '@lucide/svelte/icons/sun';
   import X from '@lucide/svelte/icons/x';
   import {
@@ -37,6 +35,7 @@
     findDirectionalNeighborPane,
     findPaneById,
     getFirstPaneId,
+    getNextWorkspaceNumber,
     listAllPanes,
     migrateAndSanitizeSession,
     moveTabBetweenPanes,
@@ -76,8 +75,18 @@
 
   let focusedPaneByWs = $state<Record<string, string>>({});
   let maximizedPaneByWs = $state<Record<string, string | null>>({});
-  let renamingWsId = $state<string | null>(null);
-  let renameInputText = $state('');
+  let workspaceModal = $state<{
+    open: boolean;
+    mode: 'create' | 'rename';
+    targetWsId?: string;
+    nameInput: string;
+    defaultNum: number;
+  }>({
+    open: false,
+    mode: 'create',
+    nameInput: '',
+    defaultNum: 1
+  });
 
   let dirtyTabs = $state<Record<string, boolean>>({});
   let tabMetaMap = $state<Record<string, FileTabMeta>>({});
@@ -224,90 +233,90 @@
     const entries: PaletteEntry[] = [
       {
         id: 'act:split-right',
-        label: 'Split kanan',
-        category: 'Aksi',
+        label: 'Split right',
+        category: 'Action',
         shortcut: kb.splitRight,
-        keywords: 'pane belah kanan horizontal',
+        keywords: 'pane split right horizontal',
         run: () => handleSplitPane(focusedPaneId, 'row')
       },
       {
         id: 'act:split-down',
-        label: 'Split bawah',
-        category: 'Aksi',
+        label: 'Split down',
+        category: 'Action',
         shortcut: kb.splitDown,
-        keywords: 'pane belah bawah vertikal',
+        keywords: 'pane split down vertical',
         run: () => handleSplitPane(focusedPaneId, 'column')
       },
       {
         id: 'act:new-terminal',
-        label: 'Terminal baru di pane aktif',
-        category: 'Aksi',
+        label: 'New terminal in active pane',
+        category: 'Action',
         shortcut: kb.newTerminal,
-        keywords: 'shell pty bash zsh',
+        keywords: 'shell pty bash zsh terminal',
         run: () => addTerminalTab(focusedPaneId)
       },
       {
         id: 'act:new-preview',
-        label: 'Preview localhost baru',
-        category: 'Aksi',
-        keywords: 'browser iframe server port 5173',
+        label: 'New localhost preview',
+        category: 'Action',
+        keywords: 'browser iframe server port 5173 preview',
         run: () => openPreviewInPane('http://localhost:5173/', focusedPaneId)
       },
       {
         id: 'act:quick-open',
-        label: 'Buka cepat file...',
-        category: 'Aksi',
+        label: 'Quick open file...',
+        category: 'Action',
         shortcut: kb.quickOpen,
-        keywords: 'quick open cari file',
+        keywords: 'quick open find file',
         run: () => {
           quickOpenVisible = true;
         }
       },
       {
         id: 'act:open-folder',
-        label: 'Buka folder',
-        category: 'Aksi',
-        keywords: 'proyek direktori pilih',
+        label: 'Open folder',
+        category: 'Action',
+        keywords: 'project directory open',
         run: () => {
           void handleChooseFolder();
         }
       },
       {
         id: 'act:sidebar-files',
-        label: 'Toggle Sidebar Files',
-        category: 'Aksi',
+        label: 'Toggle Files Sidebar',
+        category: 'Action',
         shortcut: kb.sidebarFiles,
-        keywords: 'file tree pohon berkas',
+        keywords: 'file tree explorer',
         run: () => toggleSidebarPanel('files')
       },
       {
         id: 'act:sidebar-git',
-        label: 'Toggle Sidebar Git',
-        category: 'Aksi',
+        label: 'Toggle Git Sidebar',
+        category: 'Action',
         shortcut: kb.sidebarGit,
         keywords: 'version control diff commit',
         run: () => toggleSidebarPanel('git')
       },
       {
         id: 'act:sidebar-search',
-        label: 'Toggle Sidebar Search (Cari di Proyek)',
-        category: 'Aksi',
+        label: 'Toggle Search Sidebar',
+        category: 'Action',
         shortcut: kb.sidebarSearch,
-        keywords: 'ripgrep rg grep cari teks',
+        keywords: 'ripgrep rg grep search find text',
         run: () => toggleSidebarPanel('search')
       },
       {
         id: 'act:maximize-pane',
-        label: 'Maximize / Kembalikan ukuran pane',
-        category: 'Aksi',
+        label: 'Toggle maximize pane',
+        category: 'Action',
         shortcut: kb.maximizePane,
-        keywords: 'penuh fokus perbesar',
+        keywords: 'full focus maximize restore',
         run: () => handleToggleMaximizePane(focusedPaneId)
       },
       {
         id: 'act:close-tab',
-        label: 'Tutup tab aktif',
-        category: 'Aksi',
+        label: 'Close active tab',
+        category: 'Action',
         shortcut: kb.closeTab,
         run: () => {
           if (focusedPane && activeTab) {
@@ -317,85 +326,92 @@
       },
       {
         id: 'act:close-pane',
-        label: 'Tutup pane aktif',
-        category: 'Aksi',
+        label: 'Close active pane',
+        category: 'Action',
         shortcut: kb.closePane,
         run: () => handleClosePane(focusedPaneId)
       },
       {
         id: 'act:new-workspace',
-        label: 'Workspace baru',
-        category: 'Aksi',
-        keywords: 'ruang kerja tambah',
-        run: () => handleAddWorkspace()
+        label: 'New workspace',
+        category: 'Action',
+        keywords: 'workspace add',
+        run: () => promptNewWorkspace()
+      },
+      {
+        id: 'act:rename-workspace',
+        label: 'Rename active workspace',
+        category: 'Action',
+        keywords: 'workspace rename edit',
+        run: () => promptRenameWorkspace(session.activeWorkspaceId)
       },
       {
         id: 'act:close-workspace',
-        label: 'Tutup workspace aktif',
-        category: 'Aksi',
-        keywords: 'ruang kerja hapus',
+        label: 'Close active workspace',
+        category: 'Action',
+        keywords: 'workspace close remove',
         run: () => handleCloseWorkspace(session.activeWorkspaceId)
       },
       {
         id: 'act:toggle-theme',
-        label: `Ganti tema ke ${settings.appearance.theme === 'dark' ? 'Light' : 'Dark'}`,
-        category: 'Aksi',
-        keywords: 'theme dark light terang gelap warna',
+        label: `Switch theme to ${settings.appearance.theme === 'dark' ? 'Light' : 'Dark'}`,
+        category: 'Action',
+        keywords: 'theme dark light color',
         run: () => toggleTheme()
       },
       {
         id: 'act:toggle-font',
-        label: `Ganti font ke ${
+        label: `Switch font to ${
           settings.appearance.fontFamily === 'system-mono'
             ? 'JetBrains Mono Nerd'
-            : 'Monospace Sistem'
+            : 'System Monospace'
         }`,
-        category: 'Aksi',
-        keywords: 'font huruf tipografi jetbrains',
+        category: 'Action',
+        keywords: 'font typography jetbrains',
         run: () => toggleFontFamily()
       },
       {
         id: 'act:zoom-in',
-        label: 'Perbesar ukuran font',
-        category: 'Aksi',
+        label: 'Zoom in font',
+        category: 'Action',
         shortcut: 'Alt+=',
         run: () => adjustCodeFontSize(1)
       },
       {
         id: 'act:zoom-out',
-        label: 'Perkecil ukuran font',
-        category: 'Aksi',
+        label: 'Zoom out font',
+        category: 'Action',
         shortcut: 'Alt+-',
         run: () => adjustCodeFontSize(-1)
       },
       {
         id: 'act:zoom-reset',
-        label: 'Reset ukuran font (14px)',
-        category: 'Aksi',
+        label: 'Reset font zoom (14px)',
+        category: 'Action',
         shortcut: 'Alt+0',
         run: () => adjustCodeFontSize('reset')
       },
       {
         id: 'act:git-pull',
-        label: 'Git: Pull dari remote',
-        category: 'Aksi',
+        label: 'Git: Pull from remote',
+        category: 'Action',
         run: () => {
           void gitPull()
             .then(() => refreshRepoStatus())
             .catch((err: AppErrorPayload) => {
-              sessionNotice = err.message ?? 'Git pull gagal';
+              sessionNotice = err.message ?? 'Git pull failed';
             });
         }
       },
       {
         id: 'act:git-push',
-        label: 'Git: Push ke remote',
-        category: 'Aksi',
+        label: 'Git: Push to remote',
+        category: 'Action',
         run: () => {
           void gitPush()
             .then(() => refreshRepoStatus())
             .catch((err: AppErrorPayload) => {
-              sessionNotice = err.message ?? 'Git push gagal';
+              sessionNotice = err.message ?? 'Git push failed';
             });
         }
       }
@@ -404,7 +420,7 @@
     for (const ws of session.workspaces) {
       entries.push({
         id: `ws:${ws.id}`,
-        label: `Pindah ke workspace ${ws.name}`,
+        label: `Switch to workspace ${ws.name}`,
         category: 'Workspace',
         run: () => {
           session.activeWorkspaceId = ws.id;
@@ -416,8 +432,8 @@
       if (recent !== projectState.activeFolder) {
         entries.push({
           id: `recent:${recent}`,
-          label: `Buka folder terakhir: ${recent}`,
-          category: 'Aksi',
+          label: `Open recent folder: ${recent}`,
+          category: 'Action',
           run: () => {
             void openFolderByPath(recent);
           }
@@ -441,12 +457,14 @@
   }
 
   onMount(async () => {
-    unlistenFsChanged = await onBackendEvent('fs:changed', () => {
-      void fileTreeRef?.refresh();
-      void refreshRepoStatus();
-    });
-
     try {
+      if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        unlistenFsChanged = await onBackendEvent('fs:changed', () => {
+          void fileTreeRef?.refresh();
+          void refreshRepoStatus();
+        });
+      }
+
       const [state, loadedSession, loadedSettings] = await Promise.all([
         projectGetState(),
         sessionLoad().catch(() => ({ rawJson: null, backedUpCorrupt: false })),
@@ -457,7 +475,7 @@
 
       if (loadedSession.backedUpCorrupt) {
         sessionNotice =
-          'File sesi sebelumnya tidak kompatibel atau rusak dan telah dicadangkan ke session.json.bak.';
+          'Previous session file was incompatible or corrupt and has been backed up to session.json.bak.';
       } else if (loadedSettings.warnings.length > 0) {
         sessionNotice = loadedSettings.warnings[0];
       }
@@ -558,12 +576,57 @@
     focusedPaneByWs[activeWorkspace.id] = paneId;
   }
 
-  function handleAddWorkspace() {
-    const num = session.workspaces.length + 1;
-    const wsId = nextId('ws');
-    const newWs = createInitialWorkspace(wsId, `${num} Ruang`, projectState.activeFolder ?? '');
-    session.workspaces.push(newWs);
-    session.activeWorkspaceId = wsId;
+  function promptNewWorkspace() {
+    const nextNum = getNextWorkspaceNumber(session.workspaces);
+    workspaceModal = {
+      open: true,
+      mode: 'create',
+      nameInput: String(nextNum),
+      defaultNum: nextNum
+    };
+  }
+
+  function promptRenameWorkspace(wsId: string) {
+    const target = session.workspaces.find((w) => w.id === wsId);
+    if (!target) return;
+    workspaceModal = {
+      open: true,
+      mode: 'rename',
+      targetWsId: wsId,
+      nameInput: target.name,
+      defaultNum: 1
+    };
+  }
+
+  function submitWorkspaceModal() {
+    if (!workspaceModal.open) return;
+    const entered = workspaceModal.nameInput.trim();
+
+    if (workspaceModal.mode === 'create') {
+      const finalName = entered || String(workspaceModal.defaultNum);
+      const wsId = nextId('ws');
+      const newWs = createInitialWorkspace(wsId, finalName, projectState.activeFolder ?? '');
+      session.workspaces.push(newWs);
+      session.activeWorkspaceId = wsId;
+    } else if (workspaceModal.mode === 'rename' && workspaceModal.targetWsId) {
+      const target = session.workspaces.find((w) => w.id === workspaceModal.targetWsId);
+      if (target && entered) {
+        target.name = entered;
+      }
+    }
+
+    workspaceModal.open = false;
+  }
+
+  function closeWorkspaceModal() {
+    workspaceModal.open = false;
+  }
+
+  function focusAndSelect(el: HTMLInputElement) {
+    requestAnimationFrame(() => {
+      el.focus();
+      el.select();
+    });
   }
 
   function handleCloseWorkspace(wsId: string) {
@@ -577,17 +640,24 @@
     }
   }
 
-  function commitWorkspaceRename(wsId: string) {
-    const trimmed = renameInputText.trim();
-    const target = session.workspaces.find((w) => w.id === wsId);
-    if (target && trimmed) {
-      target.name = trimmed;
-    }
-    renamingWsId = null;
-  }
-
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (!projectState.activeFolder || !activeWorkspace) return;
+
+    if (workspaceModal.open) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeWorkspaceModal();
+      }
+      return;
+    }
+
+    if (pendingClose) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        pendingClose = null;
+      }
+      return;
+    }
 
     const terminalFocused = activeTab?.kind === 'terminal';
     const action = resolveGlobalShortcut(
@@ -700,7 +770,7 @@
       }
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMessage = normalized.message ?? 'Gagal membuka dialog folder';
+      errorMessage = normalized.message ?? 'Failed to open folder dialog';
     }
   }
 
@@ -718,7 +788,7 @@
       await Promise.all([fsWatch().catch(() => {}), refreshRepoStatus()]);
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMessage = normalized.message ?? 'Gagal membuka folder proyek';
+      errorMessage = normalized.message ?? 'Failed to open project folder';
     }
   }
 
@@ -996,13 +1066,13 @@
 <div class="app-shell">
   {#if loading}
     <main class="empty-screen">
-      <p class="muted">Memuat ruang kerja...</p>
+      <p class="muted">Loading workspace...</p>
     </main>
   {:else if !projectState.activeFolder}
     <main class="empty-screen">
       <div class="welcome-card">
         <h1 class="welcome-title">glzr</h1>
-        <p class="muted">Pilih folder proyek untuk memulai ruang kerja.</p>
+        <p class="muted">Open a folder to get started.</p>
 
         {#if errorMessage}
           <p class="error-banner">{errorMessage}</p>
@@ -1011,13 +1081,13 @@
         <div class="welcome-actions">
           <button class="primary" onclick={handleChooseFolder}>
             <FolderOpen size={14} strokeWidth={2} />
-            <span>Buka folder</span>
+            <span>Open Folder</span>
           </button>
         </div>
 
         {#if projectState.recentFolders.length > 0}
           <div class="recent-section">
-            <span class="section-label">Folder terakhir</span>
+            <span class="section-label">Recent Projects</span>
             <ul class="recent-list">
               {#each projectState.recentFolders as folderPath (folderPath)}
                 <li>
@@ -1036,35 +1106,20 @@
       <div class="workspace-list">
         {#each session.workspaces as ws (ws.id)}
           <div class="ws-pill" class:active={ws.id === session.activeWorkspaceId}>
-            {#if renamingWsId === ws.id}
-              <input
-                bind:value={renameInputText}
-                type="text"
-                class="ws-rename-input"
-                onblur={() => commitWorkspaceRename(ws.id)}
-                onkeydown={(e) => {
-                  if (e.key === 'Enter') commitWorkspaceRename(ws.id);
-                  if (e.key === 'Escape') renamingWsId = null;
-                }}
-              />
-            {:else}
-              <button
-                class="workspace-item"
-                class:active={ws.id === session.activeWorkspaceId}
-                onclick={() => (session.activeWorkspaceId = ws.id)}
-                ondblclick={() => {
-                  renamingWsId = ws.id;
-                  renameInputText = ws.name;
-                }}
-              >
-                {ws.name}
-              </button>
-            {/if}
+            <button
+              class="workspace-item"
+              class:active={ws.id === session.activeWorkspaceId}
+              onclick={() => (session.activeWorkspaceId = ws.id)}
+              ondblclick={() => promptRenameWorkspace(ws.id)}
+              title="Workspace {ws.name} (Double-click to rename)"
+            >
+              {ws.name}
+            </button>
             {#if session.workspaces.length > 1}
               <button
                 class="ws-close-btn"
-                title="Hapus workspace"
-                aria-label="Hapus workspace"
+                title="Close workspace"
+                aria-label="Close workspace"
                 onclick={(e) => {
                   e.stopPropagation();
                   handleCloseWorkspace(ws.id);
@@ -1077,9 +1132,9 @@
         {/each}
         <button
           class="icon-btn"
-          title="Workspace baru"
-          aria-label="Workspace baru"
-          onclick={handleAddWorkspace}
+          title="New workspace"
+          aria-label="New workspace"
+          onclick={promptNewWorkspace}
         >
           <Plus size={14} strokeWidth={2} />
         </button>
@@ -1087,42 +1142,15 @@
       <div class="workspace-actions">
         <button
           class="folder-switch"
-          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'files'}
-          title="File Tree (Alt+E)"
-          onclick={() => toggleSidebarPanel('files')}
-        >
-          <Files size={14} strokeWidth={2} />
-          <span>File</span>
-        </button>
-        <button
-          class="folder-switch"
-          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'git'}
-          title="Panel Git (Alt+V)"
-          onclick={() => toggleSidebarPanel('git')}
-        >
-          <GitBranch size={14} strokeWidth={2} />
-          <span>Git</span>
-        </button>
-        <button
-          class="folder-switch"
-          class:active-toggle={session.sidebar.visible && session.sidebar.panel === 'search'}
-          title="Cari di Proyek (Alt+G)"
-          onclick={() => toggleSidebarPanel('search')}
-        >
-          <Search size={14} strokeWidth={2} />
-          <span>Cari</span>
-        </button>
-        <button
-          class="folder-switch"
           title="Command Palette (Alt+P)"
           onclick={() => (commandPaletteVisible = true)}
         >
-          <span>Perintah</span>
+          <span>Commands</span>
         </button>
         <button
           class="icon-btn"
-          title="Ganti tema ({settings.appearance.theme === 'dark' ? 'Light' : 'Dark'})"
-          aria-label="Ganti tema"
+          title="Toggle theme ({settings.appearance.theme === 'dark' ? 'Light' : 'Dark'})"
+          aria-label="Toggle theme"
           onclick={toggleTheme}
         >
           {#if settings.appearance.theme === 'dark'}
@@ -1141,7 +1169,7 @@
     {#if sessionNotice}
       <div class="session-notice-bar">
         <span>{sessionNotice}</span>
-        <button class="small-btn" onclick={() => (sessionNotice = null)}>Tutup</button>
+        <button class="small-btn" onclick={() => (sessionNotice = null)}>Close</button>
       </div>
     {/if}
 
@@ -1222,6 +1250,7 @@
           <div class="workspace-canvas" class:hidden-ws={!isWsActive}>
             <PaneNode
               node={renderNode}
+              theme={settings.appearance.theme}
               focusedPaneId={wsFocusedPane}
               maximizedPaneId={wsMaxPaneId}
               workspaceVisible={isWsActive}
@@ -1278,7 +1307,7 @@
 
     <footer class="status-bar">
       <div class="status-left">
-        <span>{projectState.folderName ?? 'proyek'}</span>
+        <span>{projectState.folderName ?? 'project'}</span>
         {#if repoStatus?.isRepo}
           <span class="status-branch">
             <GitBranch size={12} strokeWidth={2} />
@@ -1321,13 +1350,56 @@
 
     {#if pendingClose}
       <div class="modal-backdrop">
-        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-label="Konfirmasi simpan">
-          <h2 class="confirm-title">Simpan perubahan sebelum menutup?</h2>
-          <p class="muted">Perubahan yang belum disimpan akan hilang jika tab ditutup.</p>
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-label="Confirm save">
+          <h2 class="confirm-title">Save changes before closing?</h2>
+          <p class="muted">Unsaved changes will be lost if the tab is closed.</p>
           <div class="confirm-actions">
-            <button class="primary" onclick={handleConfirmSaveAndClose}>Simpan</button>
-            <button class="danger" onclick={handleDiscardAndClose}>Buang</button>
-            <button onclick={() => (pendingClose = null)}>Batal</button>
+            <button class="primary" onclick={handleConfirmSaveAndClose}>Save</button>
+            <button class="danger" onclick={handleDiscardAndClose}>Discard</button>
+            <button onclick={() => (pendingClose = null)}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if workspaceModal.open}
+      <div
+        class="modal-backdrop"
+        role="presentation"
+        onclick={(e) => {
+          if (e.target === e.currentTarget) closeWorkspaceModal();
+        }}
+      >
+        <div
+          class="confirm-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label={workspaceModal.mode === 'create' ? 'New Workspace' : 'Rename Workspace'}
+        >
+          <h2 class="confirm-title">
+            {workspaceModal.mode === 'create' ? 'New Workspace' : 'Rename Workspace'}
+          </h2>
+          <p class="muted">
+            {workspaceModal.mode === 'create'
+              ? 'Enter workspace name, or accept the sequential default number.'
+              : 'Enter a new name for this workspace.'}
+          </p>
+          <input
+            bind:value={workspaceModal.nameInput}
+            type="text"
+            class="ws-modal-input"
+            placeholder={String(workspaceModal.defaultNum)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') submitWorkspaceModal();
+              if (e.key === 'Escape') closeWorkspaceModal();
+            }}
+            use:focusAndSelect
+          />
+          <div class="confirm-actions">
+            <button onclick={closeWorkspaceModal}>Cancel</button>
+            <button class="primary" onclick={submitWorkspaceModal}>
+              {workspaceModal.mode === 'create' ? 'Create' : 'Rename'}
+            </button>
           </div>
         </div>
       </div>
@@ -1466,11 +1538,20 @@
     color: var(--ac);
   }
 
-  .ws-rename-input {
-    width: 96px;
-    height: 24px;
-    padding: 0 6px;
-    font-size: 12px;
+  .ws-modal-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    background: var(--sf);
+    border: 1px solid var(--bd);
+    border-radius: var(--radius-ctrl);
+    color: var(--tx);
+    font-size: 13px;
+  }
+
+  .ws-modal-input:focus {
+    outline: none;
+    border-color: var(--ac);
   }
 
   .ws-close-btn {
@@ -1493,11 +1574,6 @@
     padding: 4px 10px;
     border: none;
     color: var(--dm);
-  }
-
-  .folder-switch.active-toggle {
-    background: var(--acs);
-    color: var(--ac);
   }
 
   .icon-btn {

@@ -220,7 +220,7 @@ pub fn spawn_rg_process(workspace_root: &Path, opts: &SearchQueryOptions) -> App
         .spawn()
         .map_err(|err| {
             AppError::ExternalCommand(format!(
-                "gagal menjalankan ripgrep ({}): {}",
+                "failed to spawn ripgrep ({}): {}",
                 rg_bin.display(),
                 err
             ))

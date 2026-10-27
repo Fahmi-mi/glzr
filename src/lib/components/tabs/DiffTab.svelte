@@ -41,7 +41,7 @@
       diffData = await gitDiff(targetPath, staged);
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memuat diff';
+      errorMsg = normalized.message ?? 'Failed to load diff';
       diffData = null;
     } finally {
       loading = false;
@@ -61,7 +61,7 @@
       onChanged?.();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal stage hunk';
+      errorMsg = normalized.message ?? 'Failed to stage hunk';
     } finally {
       busyHunk = null;
     }
@@ -76,7 +76,7 @@
       onChanged?.();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal unstage hunk';
+      errorMsg = normalized.message ?? 'Failed to unstage hunk';
     } finally {
       busyHunk = null;
     }
@@ -92,7 +92,7 @@
       onChanged?.();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal membuang perubahan hunk';
+      errorMsg = normalized.message ?? 'Failed to discard hunk';
     } finally {
       busyHunk = null;
     }
@@ -116,7 +116,7 @@
     <div class="toolbar-right">
       <button class="small-btn" onclick={() => onOpenFile?.(relPath, null)}>
         <FileCode size={14} strokeWidth={2} />
-        <span>Buka file</span>
+        <span>Open file</span>
       </button>
     </div>
   </div>
@@ -130,26 +130,26 @@
   <div class="diff-scroll">
     {#if loading}
       <div class="empty-box">
-        <p class="muted">Memuat diff...</p>
+        <p class="muted">Loading diff...</p>
       </div>
     {:else if !diffData}
       <div class="empty-box">
-        <p class="muted">Diff tidak tersedia.</p>
+        <p class="muted">Diff unavailable.</p>
       </div>
     {:else if diffData.tooLarge}
       <div class="empty-box">
         <p class="muted">
-          Diff terlalu besar (lebih dari 2 MB). Gunakan terminal untuk memeriksa perubahan ini.
+          Diff is too large (> 2 MB). Use terminal to inspect changes.
         </p>
       </div>
     {:else if diffData.isBinary}
       <div class="empty-box">
-        <p class="muted">File biner berubah. Diff per hunk tidak ditampilkan.</p>
+        <p class="muted">Binary file changed. Per-hunk diff is not available.</p>
       </div>
     {:else if !diffData.fileDiff || diffData.fileDiff.hunks.length === 0}
       <div class="empty-box">
         <p class="muted">
-          Tidak ada perubahan {stagedMode ? 'staged' : 'unstaged'} pada file ini.
+          No {stagedMode ? 'staged' : 'unstaged'} changes in this file.
         </p>
       </div>
     {:else}
@@ -184,10 +184,10 @@
                       disabled={busyHunk === hunk.index}
                       onclick={() => handleDiscardHunk(hunk.index)}
                     >
-                      Konfirmasi buang
+                      Confirm discard
                     </button>
                     <button class="small-btn" onclick={() => (confirmingDiscardHunk = null)}>
-                      Batal
+                      Cancel
                     </button>
                   {:else}
                     <button

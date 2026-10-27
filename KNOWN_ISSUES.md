@@ -19,7 +19,7 @@ Daftar masalah yang diketahui, hasil validasi spike teknis, serta mitigasi opera
 
 - **Status:** Tersedia mitigasi lingkungan
 - **Gejala:** Jendela aplikasi tampak kosong atau putih saat dijalankan pada sistem Linux dengan driver NVIDIA proprietary atau grafis hybrid.
-- **Solusi:** Jalankan dengan environment variable `WEBKIT_DISABLE_DMABUF_RENDERER=1` (atau `WEBKIT_DISABLE_COMPOSITING_MODE=1`). Modul `pty` otomatis membersihkan variabel `WEBKIT_*` sebelum men-spawn shell agar tidak bocor ke subproses terminal.
+- **Solusi:** Jalankan dengan environment variable `WEBKIT_DISABLE_DMABUF_RENDERER=1` dan `WEBKIT_DISABLE_COMPOSITING_MODE=1` (glzr otomatis menyetel kedua variabel ini jika mendeteksi driver NVIDIA). Modul `pty` otomatis membersihkan variabel `WEBKIT_*` sebelum men-spawn shell agar tidak bocor ke subproses terminal.
 
 ### 2. Karakter UTF-8 rusak saat output terminal sangat deras
 
@@ -65,3 +65,15 @@ Daftar masalah yang diketahui, hasil validasi spike teknis, serta mitigasi opera
 - **Status:** Beroperasi via terminal
 - **Gejala:** Operasi push/pull melalui panel GUI meminta input username/password atau passphrase SSH dan berisiko hang jika tidak ada prompt TTY.
 - **Solusi:** Backend git menyetel `GIT_TERMINAL_PROMPT=0`. Untuk repo yang membutuhkan autentikasi interaktif atau SSH passphrase baru, jalankan push/pull melalui tab terminal glzr.
+
+### 9. Window blank akibat cache fontconfig Linux terkorupsi
+
+- **Status:** Selesai (`src-tauri/src/lib.rs`)
+- **Gejala:** Jendela aplikasi terbuka blank dan WebKitWebProcess memakan 50-100% CPU saat inisialisasi font.
+- **Solusi:** glzr secara otomatis mendeteksi dan membersihkan symlink duplikat pada direktori `~/.cache/fontconfig` saat boot, atau pengguna dapat meregenerasi cache font sistem dengan perintah `fc-cache -f`.
+
+### 10. Biner standalone menampilkan Connection refused ke localhost
+
+- **Status:** Selesai (`src-tauri/Cargo.toml`)
+- **Gejala:** Menjalankan biner standalone release memunculkan pesan error "Could not connect to localhost: Connection refused" karena tidak ada dev server Vite yang berjalan.
+- **Solusi:** Mengaktifkan fitur `custom-protocol = ["tauri/custom-protocol"]` sebagai fitur default di `src-tauri/Cargo.toml`. Hal ini memastikan kompilasi release secara otomatis menyematkan seluruh berkas statis frontend (`../build`) ke dalam biner untuk disajikan langsung via protokol lokal `tauri://localhost`.

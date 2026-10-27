@@ -84,7 +84,7 @@
       dirCache[dirKey] = entries;
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memuat direktori';
+      errorMsg = normalized.message ?? 'Failed to load directory';
     }
   }
 
@@ -162,7 +162,7 @@
       await refresh();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal membuat item baru';
+      errorMsg = normalized.message ?? 'Failed to create new item';
     }
   }
 
@@ -190,7 +190,7 @@
       await refresh();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal mengubah nama item';
+      errorMsg = normalized.message ?? 'Failed to rename item';
     }
   }
 
@@ -205,7 +205,7 @@
       await refresh();
     } catch (err) {
       const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Gagal memindahkan ke trash';
+      errorMsg = normalized.message ?? 'Failed to move to trash';
     }
   }
 
@@ -216,28 +216,28 @@
 
 <aside class="file-tree-panel" bind:this={treeContainerEl} tabindex="-1">
   <div class="panel-header">
-    <span class="panel-title">File Proyek</span>
+    <span class="panel-title">Files</span>
     <div class="header-actions">
       <button
         class="icon-btn"
-        title="File baru"
-        aria-label="File baru"
+        title="New file"
+        aria-label="New file"
         onclick={() => startCreate(false)}
       >
         <FilePlus size={14} strokeWidth={2} />
       </button>
       <button
         class="icon-btn"
-        title="Folder baru"
-        aria-label="Folder baru"
+        title="New folder"
+        aria-label="New folder"
         onclick={() => startCreate(true)}
       >
         <FolderPlus size={14} strokeWidth={2} />
       </button>
       <button
         class="icon-btn"
-        title="Segarkan pohon file"
-        aria-label="Segarkan pohon file"
+        title="Refresh file tree"
+        aria-label="Refresh file tree"
         onclick={() => refresh()}
       >
         <RefreshCw size={14} strokeWidth={2} />
@@ -257,19 +257,19 @@
         bind:value={newNameInput}
         type="text"
         class="inline-input"
-        placeholder={creatingMode.isDir ? 'Nama folder baru...' : 'Nama file baru...'}
+        placeholder={creatingMode.isDir ? 'New folder name...' : 'New file name...'}
         onkeydown={(e) => {
           if (e.key === 'Enter') void submitCreate();
           if (e.key === 'Escape') creatingMode = null;
         }}
       />
-      <button class="primary small-btn" onclick={submitCreate}>Buat</button>
+      <button class="primary small-btn" onclick={submitCreate}>Create</button>
     </div>
   {/if}
 
   <div class="tree-scroll">
     {#if flatRows.length === 0}
-      <div class="empty-box">Folder kosong</div>
+      <div class="empty-box">Folder is empty</div>
     {:else}
       {#each flatRows as row (row.entry.path)}
         {@const badge = gitBadges[row.entry.relPath]}
@@ -311,32 +311,32 @@
             <div class="row-actions">
               <button
                 class="row-btn"
-                title="Salin path"
-                aria-label="Salin path"
+                title="Copy path"
+                aria-label="Copy path"
                 onclick={() => copyPathToClipboard(row.entry.path)}
               >
                 <Copy size={12} strokeWidth={2} />
               </button>
               <button
                 class="row-btn"
-                title="Buka di manajer file"
-                aria-label="Buka di manajer file"
+                title="Reveal in file manager"
+                aria-label="Reveal in file manager"
                 onclick={() => void revealInFileManager(row.entry.path).catch(() => {})}
               >
                 <ExternalLink size={12} strokeWidth={2} />
               </button>
               <button
                 class="row-btn"
-                title="Ubah nama"
-                aria-label="Ubah nama"
+                title="Rename"
+                aria-label="Rename"
                 onclick={() => startRename(row.entry)}
               >
                 <Pencil size={12} strokeWidth={2} />
               </button>
               <button
                 class="row-btn"
-                title="Pindahkan ke trash"
-                aria-label="Pindahkan ke trash"
+                title="Move to trash"
+                aria-label="Move to trash"
                 onclick={() => (confirmDeleteEntry = row.entry)}
               >
                 <Trash2 size={12} strokeWidth={2} />
@@ -351,11 +351,11 @@
   {#if confirmDeleteEntry}
     <div class="confirm-bar">
       <span class="confirm-text">
-        Hapus <span class="mono">{confirmDeleteEntry.name}</span> ke trash?
+        Move <span class="mono">{confirmDeleteEntry.name}</span> to trash?
       </span>
       <div class="confirm-actions">
-        <button class="danger small-btn" onclick={handleConfirmDelete}>Hapus</button>
-        <button class="small-btn" onclick={() => (confirmDeleteEntry = null)}>Batal</button>
+        <button class="danger small-btn" onclick={handleConfirmDelete}>Delete</button>
+        <button class="small-btn" onclick={() => (confirmDeleteEntry = null)}>Cancel</button>
       </div>
     </div>
   {/if}
@@ -434,7 +434,9 @@
 
   .tree-scroll {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -443,6 +445,10 @@
 
   .tree-row {
     height: 28px;
+    min-height: 28px;
+    line-height: 28px;
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding-right: 4px;
     border-radius: var(--radius-ctrl);
     display: flex;
@@ -460,6 +466,8 @@
     flex: 1;
     min-width: 0;
     height: 26px;
+    line-height: 26px;
+    box-sizing: border-box;
     padding: 0 4px;
     border: none;
     background: transparent;
@@ -532,6 +540,8 @@
   }
 
   .empty-box {
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding: 16px 12px;
     font-size: 12px;
     color: var(--dm);
