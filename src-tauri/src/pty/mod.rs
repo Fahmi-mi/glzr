@@ -230,13 +230,27 @@ mod tests {
         let tmp = TempDir::new()?;
         let map: Mutex<HashMap<String, Arc<PtySession>>> = Mutex::new(HashMap::new());
 
-        let (dto1, _arc1, _rx1) =
-            spawn_session_entry(&map, Some("tab-1:inst-1".into()), "sh", &[], tmp.path(), 80, 24)?;
+        let (dto1, _arc1, _rx1) = spawn_session_entry(
+            &map,
+            Some("tab-1:inst-1".into()),
+            "sh",
+            &[],
+            tmp.path(),
+            80,
+            24,
+        )?;
         assert_eq!(dto1.session_id, "tab-1:inst-1");
         assert_eq!(map.lock().map_err(|_| AppError::LockPoisoned)?.len(), 1);
 
-        let (dto2, _arc2, _rx2) =
-            spawn_session_entry(&map, Some("tab-1:inst-2".into()), "sh", &[], tmp.path(), 80, 24)?;
+        let (dto2, _arc2, _rx2) = spawn_session_entry(
+            &map,
+            Some("tab-1:inst-2".into()),
+            "sh",
+            &[],
+            tmp.path(),
+            80,
+            24,
+        )?;
         assert_eq!(dto2.session_id, "tab-1:inst-2");
 
         let guard = map.lock().map_err(|_| AppError::LockPoisoned)?;

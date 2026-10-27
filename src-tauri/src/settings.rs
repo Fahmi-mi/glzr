@@ -335,9 +335,7 @@ pub fn load_settings_from_path(path: &Path) -> AppResult<SettingsLoadDto> {
         Err(_) => {
             return Ok(SettingsLoadDto {
                 settings: AppSettings::default(),
-                warnings: vec![
-                    "Failed to read settings.toml; using default settings.".to_string(),
-                ],
+                warnings: vec!["Failed to read settings.toml; using default settings.".to_string()],
             });
         }
     };
@@ -421,8 +419,7 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
         Ok(v) => v,
         Err(_) => {
             warnings.push(
-                "Corrupt settings.toml cannot be parsed; using default settings."
-                    .to_string(),
+                "Corrupt settings.toml cannot be parsed; using default settings.".to_string(),
             );
             return SettingsLoadDto { settings, warnings };
         }
@@ -471,7 +468,8 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
             if (1..=16).contains(&ts) {
                 settings.editor.tab_size = ts as u8;
             } else {
-                warnings.push("editor.tab_size is outside the range 1..16; using default 4.".into());
+                warnings
+                    .push("editor.tab_size is outside the range 1..16; using default 4.".into());
             }
         }
         if let Some(ins) = ed_tbl.get("insert_spaces").and_then(|v| v.as_bool()) {
