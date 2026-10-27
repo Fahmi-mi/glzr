@@ -44,11 +44,7 @@ export interface SessionFile {
   workspaces: Workspace[];
 }
 
-export function createInitialWorkspace(
-  workspaceId = 'ws-1',
-  name = '1',
-  cwd = ''
-): Workspace {
+export function createInitialWorkspace(workspaceId = 'ws-1', name = '1', cwd = ''): Workspace {
   const tabId = `${workspaceId}-tab-1`;
   const paneId = `${workspaceId}-pane-1`;
 

@@ -46,8 +46,8 @@
   --radius-panel: 8px;
   --radius-dialog: 12px;
   --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.35);
-  --scrollbar-thumb: rgba(230, 231, 234, 0.30);
-  --scrollbar-thumb-hover: rgba(230, 231, 234, 0.50);
+  --scrollbar-thumb: rgba(230, 231, 234, 0.3);
+  --scrollbar-thumb-hover: rgba(230, 231, 234, 0.5);
 }
 
 [data-theme='light'] {

@@ -138,9 +138,7 @@
       </div>
     {:else if diffData.tooLarge}
       <div class="empty-box">
-        <p class="muted">
-          Diff is too large (> 2 MB). Use terminal to inspect changes.
-        </p>
+        <p class="muted">Diff is too large (> 2 MB). Use terminal to inspect changes.</p>
       </div>
     {:else if diffData.isBinary}
       <div class="empty-box">
