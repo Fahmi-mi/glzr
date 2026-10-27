@@ -28,7 +28,7 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-portable-pty = "0.8"
+portable-pty = "0.9"
 notify = "7"
 tokio = { version = "1", features = ["sync", "process", "rt", "time", "macros"] }
 toml = "0.8"
