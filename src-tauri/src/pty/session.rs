@@ -127,9 +127,11 @@ impl PtySession {
         self.stop_flag.store(true, Ordering::SeqCst);
         let mut child = self.child.lock().map_err(|_| PtyError::LockPoisoned)?;
         if let Some(pid) = child.process_id() {
-            let neg_pgid = format!("-{}", pid);
-            let _ = Command::new("kill").args(["-TERM", &neg_pgid]).status();
-            let _ = Command::new("kill").args(["-KILL", &neg_pgid]).status();
+            if pid > 1 {
+                let neg_pgid = format!("-{}", pid);
+                let _ = Command::new("kill").args(["-TERM", &neg_pgid]).status();
+                let _ = Command::new("kill").args(["-KILL", &neg_pgid]).status();
+            }
         }
         let _ = child.kill();
         let _ = child.wait();
