@@ -157,6 +157,11 @@
   $effect(() => {
     if (term) {
       term.options.theme = getTerminalTheme(theme);
+      try {
+        term.refresh(0, Math.max(0, term.rows - 1));
+      } catch {
+        // Ignore during transient state
+      }
     }
   });
 
