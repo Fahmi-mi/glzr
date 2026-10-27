@@ -31,7 +31,7 @@ thiserror = "2"
 portable-pty = "0.8"
 notify = "7"
 tokio = { version = "1", features = ["sync", "process", "rt", "time", "macros"] }
-toml = "0.8"
+toml = "1.1"
 trash = "5"
 
 [dev-dependencies]
