@@ -16,6 +16,7 @@
   let filePaths = $state<string[]>([]);
   let selectedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | null>(null);
+  let listEl = $state<HTMLUListElement | null>(null);
 
   const combinedEntries = $derived.by<PaletteEntry[]>(() => {
     const parsedQuery = parseFileLineQuery(query);
@@ -58,10 +59,20 @@
     return { filePart: trimmed, line: null };
   }
 
+  function scrollSelectedIntoView(index: number) {
+    if (!listEl) return;
+    const rows = listEl.querySelectorAll<HTMLElement>('.palette-row');
+    const target = rows[index];
+    if (target) {
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+
   $effect(() => {
     if (open) {
       query = '';
       selectedIndex = 0;
+      if (listEl) listEl.scrollTop = 0;
       if (workspaceRoot) {
         void fsListWorkspaceFiles()
           .then((list) => {
@@ -75,6 +86,7 @@
       }
       queueMicrotask(() => {
         inputEl?.focus();
+        if (listEl) listEl.scrollTop = 0;
       });
     }
   });
@@ -97,6 +109,7 @@
       event.preventDefault();
       if (combinedEntries.length > 0) {
         selectedIndex = (selectedIndex + 1) % combinedEntries.length;
+        scrollSelectedIntoView(selectedIndex);
       }
       return;
     }
@@ -105,6 +118,7 @@
       event.preventDefault();
       if (combinedEntries.length > 0) {
         selectedIndex = (selectedIndex - 1 + combinedEntries.length) % combinedEntries.length;
+        scrollSelectedIntoView(selectedIndex);
       }
       return;
     }
@@ -138,11 +152,12 @@
           placeholder="Type a command or file name..."
           oninput={() => {
             selectedIndex = 0;
+            if (listEl) listEl.scrollTop = 0;
           }}
         />
       </div>
 
-      <ul class="palette-list">
+      <ul bind:this={listEl} class="palette-list">
         {#if combinedEntries.length === 0}
           <li class="empty-row">No matching commands or files</li>
         {:else}
@@ -151,7 +166,9 @@
               <button
                 class="palette-row"
                 class:selected={i === selectedIndex}
-                onmouseenter={() => (selectedIndex = i)}
+                onmousemove={(e) => {
+                  if (e.movementX !== 0 || e.movementY !== 0) selectedIndex = i;
+                }}
                 onclick={() => executeIndex(i)}
               >
                 <span class="row-label" class:mono={item.category === 'File'}>{item.label}</span>

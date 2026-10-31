@@ -110,30 +110,38 @@
       backgroundColor: 'var(--bg)',
       color: 'var(--tx)',
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--font-size-code)'
+      fontSize: 'var(--font-size-code)',
+      lineHeight: '24px'
     },
     '.cm-scroller': {
       fontFamily: 'var(--font-mono)',
       lineHeight: '24px',
-      padding: '16px 0',
       overflow: 'auto',
       overscrollBehavior: 'contain'
     },
     '.cm-line': {
       lineHeight: '24px',
+      height: '24px',
       minHeight: '24px',
       boxSizing: 'border-box'
     },
-    '.cm-gutterElement': {
+    '.cm-lineNumbers .cm-gutterElement': {
       lineHeight: '24px',
+      height: '24px',
       minHeight: '24px',
       boxSizing: 'border-box',
       minWidth: '3.5ch',
       textAlign: 'right'
     },
+    '.cm-foldGutter .cm-gutterElement': {
+      lineHeight: '24px',
+      height: '24px',
+      minHeight: '24px',
+      boxSizing: 'border-box'
+    },
     '.cm-content': {
       caretColor: 'var(--ac)',
-      padding: '0 24px 0 0'
+      padding: '16px 24px 16px 0'
     },
     '.cm-cursor, .cm-dropCursor': {
       borderLeftColor: 'var(--ac)',
