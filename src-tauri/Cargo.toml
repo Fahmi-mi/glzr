@@ -34,6 +34,9 @@ tokio = { version = "1", features = ["sync", "process", "rt", "time", "macros"] 
 toml = "0.8"
 trash = "5"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"
 

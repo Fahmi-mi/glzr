@@ -117,8 +117,19 @@
       lineHeight: '24px',
       padding: '16px 0',
       overflow: 'auto',
-      overscrollBehavior: 'contain',
-      willChange: 'transform'
+      overscrollBehavior: 'contain'
+    },
+    '.cm-line': {
+      lineHeight: '24px',
+      minHeight: '24px',
+      boxSizing: 'border-box'
+    },
+    '.cm-gutterElement': {
+      lineHeight: '24px',
+      minHeight: '24px',
+      boxSizing: 'border-box',
+      minWidth: '3.5ch',
+      textAlign: 'right'
     },
     '.cm-content': {
       caretColor: 'var(--ac)',

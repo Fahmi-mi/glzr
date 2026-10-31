@@ -1,7 +1,6 @@
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::Command;
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -30,6 +29,18 @@ pub struct PtySession {
     child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
     stop_flag: Arc<AtomicBool>,
     reader_handle: Mutex<Option<JoinHandle<()>>>,
+}
+
+#[cfg(unix)]
+pub(crate) fn is_safe_process_group_leader(pid: u32) -> Option<i32> {
+    if pid > 1 && pid <= i32::MAX as u32 {
+        let pid_i32 = pid as i32;
+        let pgid = unsafe { libc::getpgid(pid_i32) };
+        if pgid == pid_i32 {
+            return Some(pid_i32);
+        }
+    }
+    None
 }
 
 impl PtySession {
@@ -126,13 +137,17 @@ impl PtySession {
     pub fn kill(&self) -> Result<(), PtyError> {
         self.stop_flag.store(true, Ordering::SeqCst);
         let mut child = self.child.lock().map_err(|_| PtyError::LockPoisoned)?;
+
+        #[cfg(unix)]
         if let Some(pid) = child.process_id() {
-            if pid > 1 {
-                let neg_pgid = format!("-{}", pid);
-                let _ = Command::new("kill").args(["-TERM", &neg_pgid]).status();
-                let _ = Command::new("kill").args(["-KILL", &neg_pgid]).status();
+            if let Some(pid_i32) = is_safe_process_group_leader(pid) {
+                unsafe {
+                    let _ = libc::killpg(pid_i32, libc::SIGTERM);
+                    let _ = libc::killpg(pid_i32, libc::SIGKILL);
+                }
             }
         }
+
         let _ = child.kill();
         let _ = child.wait();
         if let Ok(mut guard) = self.reader_handle.lock() {
@@ -317,9 +332,66 @@ mod tests {
     #[test]
     fn spike_pty_resize_and_kill_terminates_process_group() -> Result<(), PtyError> {
         let cwd = env::current_dir()?;
-        let (session, _rx) = PtySession::spawn("sh", &["-c", "sleep 60 & wait"], &cwd, 80, 24)?;
+        let pid_file = tempfile::NamedTempFile::new().map_err(PtyError::Io)?;
+        let pid_path = pid_file.path().to_str().unwrap().to_string();
+        let cmd = format!("sleep 60 & echo $! > \"{}\"; wait", pid_path);
+        let (session, _rx) = PtySession::spawn("sh", &["-c", &cmd], &cwd, 80, 24)?;
         session.resize(120, 40)?;
+
+        let mut bg_pid: i32 = 0;
+        for _ in 0..100 {
+            if let Ok(content) = std::fs::read_to_string(&pid_path) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    if let Ok(parsed) = trimmed.parse::<i32>() {
+                        bg_pid = parsed;
+                        break;
+                    }
+                }
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(bg_pid > 1, "background PID should be valid");
+
+        #[cfg(unix)]
+        {
+            unsafe {
+                let child_pid = session.child.lock().unwrap().process_id().unwrap();
+                let child_pgid = libc::getpgid(child_pid as i32);
+                let bg_pgid = libc::getpgid(bg_pid);
+                assert_eq!(child_pgid, child_pid as i32);
+                assert_eq!(bg_pgid, child_pgid);
+                assert_eq!(libc::kill(bg_pid, 0), 0);
+            }
+        }
+
         session.kill()?;
+
+        #[cfg(unix)]
+        {
+            thread::sleep(Duration::from_millis(50));
+            let proc_path = format!("/proc/{}", bg_pid);
+            if let Ok(status) = std::fs::read_to_string(format!("{}/status", proc_path)) {
+                assert!(
+                    status.contains("State:\tZ") || !std::path::Path::new(&proc_path).exists(),
+                    "background process should be terminated or zombie"
+                );
+            }
+        }
+
+        // Verify kill idempotency
+        assert!(session.kill().is_ok());
+
         Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_process_group_leader_safety_boundaries() {
+        assert_eq!(is_safe_process_group_leader(0), None);
+        assert_eq!(is_safe_process_group_leader(1), None);
+        assert_eq!(is_safe_process_group_leader(u32::MAX), None);
+        assert_eq!(is_safe_process_group_leader(i32::MAX as u32 + 1), None);
+        assert_eq!(is_safe_process_group_leader(2_000_000_000), None);
     }
 }
