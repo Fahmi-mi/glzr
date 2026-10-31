@@ -10,13 +10,7 @@
     indentWithTab,
     toggleComment
   } from '@codemirror/commands';
-  import {
-    HighlightStyle,
-    bracketMatching,
-    foldGutter,
-    foldKeymap,
-    syntaxHighlighting
-  } from '@codemirror/language';
+  import { HighlightStyle, bracketMatching, syntaxHighlighting } from '@codemirror/language';
   import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
   import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
   import { tags } from '@lezer/highlight';
@@ -117,7 +111,10 @@
       fontFamily: 'var(--font-mono)',
       lineHeight: '24px',
       overflow: 'auto',
-      overscrollBehavior: 'contain'
+      overscrollBehavior: 'contain',
+      WebkitOverflowScrolling: 'touch',
+      WebkitFontSmoothing: 'antialiased',
+      scrollBehavior: 'auto'
     },
     '.cm-line': {
       lineHeight: '24px',
@@ -125,19 +122,16 @@
       minHeight: '24px',
       boxSizing: 'border-box'
     },
+    '.cm-lineNumbers': {
+      contain: 'layout style'
+    },
     '.cm-lineNumbers .cm-gutterElement': {
       lineHeight: '24px',
       height: '24px',
       minHeight: '24px',
       boxSizing: 'border-box',
-      minWidth: '3.5ch',
+      minWidth: '32px',
       textAlign: 'right'
-    },
-    '.cm-foldGutter .cm-gutterElement': {
-      lineHeight: '24px',
-      height: '24px',
-      minHeight: '24px',
-      boxSizing: 'border-box'
     },
     '.cm-content': {
       caretColor: 'var(--ac)',
@@ -155,7 +149,8 @@
       color: 'var(--ft)',
       border: 'none',
       paddingLeft: '16px',
-      paddingRight: '12px'
+      paddingRight: '12px',
+      contain: 'layout style'
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'transparent',
@@ -318,7 +313,6 @@
         drawSelection(),
         bracketMatching(),
         closeBrackets(),
-        foldGutter(),
         search({ top: true }),
         highlightSelectionMatches(),
         syntaxHighlighting(glzrHighlightStyle),
@@ -341,7 +335,6 @@
           ...defaultKeymap,
           ...searchKeymap,
           ...historyKeymap,
-          ...foldKeymap,
           indentWithTab
         ]),
         updateListener
