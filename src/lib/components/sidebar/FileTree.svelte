@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Copy from '@lucide/svelte/icons/copy';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import File from '@lucide/svelte/icons/file';
@@ -23,6 +23,7 @@
     type GitBadge
   } from '$lib/ipc';
   import { badgeColorVar } from '$lib/git';
+  import { clampMenuCoordinates } from '$lib/menu';
 
   interface Props {
     workspaceRoot: string;
@@ -55,6 +56,15 @@
   let renameInput = $state('');
   let confirmDeleteEntry = $state<DirEntryDto | null>(null);
   let treeContainerEl = $state<HTMLElement | null>(null);
+
+  interface ContextMenuState {
+    x: number;
+    y: number;
+    entry: DirEntryDto;
+  }
+
+  let contextMenu = $state<ContextMenuState | null>(null);
+  let contextMenuEl = $state<HTMLElement | null>(null);
 
   const flatRows = $derived.by<TreeRow[]>(() => {
     const out: TreeRow[] = [];
@@ -212,6 +222,109 @@
   function copyPathToClipboard(path: string) {
     void navigator.clipboard.writeText(path).catch(() => {});
   }
+
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function handleRowContextMenu(e: MouseEvent, entry: DirEntryDto) {
+    if (renamingEntry?.path === entry.path) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectedPath = entry.path;
+    creatingMode = null;
+    confirmDeleteEntry = null;
+
+    const winW = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const winH = typeof window !== 'undefined' ? window.innerHeight : 768;
+    const initialPos = clampMenuCoordinates(e.clientX, e.clientY, 180, 130, winW, winH);
+
+    contextMenu = {
+      x: initialPos.x,
+      y: initialPos.y,
+      entry
+    };
+
+    void tick().then(() => {
+      if (contextMenuEl && contextMenu) {
+        const rect = contextMenuEl.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const currentWinW = typeof window !== 'undefined' ? window.innerWidth : winW;
+          const currentWinH = typeof window !== 'undefined' ? window.innerHeight : winH;
+          const refined = clampMenuCoordinates(
+            e.clientX,
+            e.clientY,
+            rect.width,
+            rect.height,
+            currentWinW,
+            currentWinH
+          );
+          if (refined.x !== contextMenu.x || refined.y !== contextMenu.y) {
+            contextMenu = { ...contextMenu, x: refined.x, y: refined.y };
+          }
+        }
+      }
+    });
+  }
+
+  function handleMenuAction(action: 'copy-path' | 'reveal' | 'rename' | 'trash') {
+    if (!contextMenu) return;
+    const entry = contextMenu.entry;
+    closeContextMenu();
+
+    switch (action) {
+      case 'copy-path':
+        copyPathToClipboard(entry.path);
+        break;
+      case 'reveal':
+        void revealInFileManager(entry.path).catch(() => {});
+        break;
+      case 'rename':
+        startRename(entry);
+        break;
+      case 'trash':
+        confirmDeleteEntry = entry;
+        break;
+    }
+  }
+
+  $effect(() => {
+    if (!contextMenu) return;
+
+    function handlePointerDown(e: MouseEvent | PointerEvent) {
+      if (contextMenuEl && !contextMenuEl.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeContextMenu();
+      }
+    }
+
+    function handleBlurOrResize() {
+      closeContextMenu();
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlurOrResize);
+    window.addEventListener('resize', handleBlurOrResize);
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlurOrResize);
+      window.removeEventListener('resize', handleBlurOrResize);
+    };
+  });
 </script>
 
 <aside class="file-tree-panel" bind:this={treeContainerEl} tabindex="-1">
@@ -267,7 +380,7 @@
     </div>
   {/if}
 
-  <div class="tree-scroll">
+  <div class="tree-scroll" onscroll={closeContextMenu}>
     {#if flatRows.length === 0}
       <div class="empty-box">Folder is empty</div>
     {:else}
@@ -277,12 +390,17 @@
           class="tree-row"
           class:selected={selectedPath === row.entry.path}
           style:padding-left="{8 + row.depth * 14}px"
+          role="treeitem"
+          aria-selected={selectedPath === row.entry.path}
+          tabindex="-1"
+          oncontextmenu={(e) => handleRowContextMenu(e, row.entry)}
         >
           {#if renamingEntry?.path === row.entry.path}
             <input
               bind:value={renameInput}
               type="text"
               class="inline-input"
+              use:focusAndSelect
               onblur={() => void submitRename()}
               onkeydown={(e) => {
                 if (e.key === 'Enter') void submitRename();
@@ -307,41 +425,6 @@
                 <span class="git-badge mono" style:color={badgeColorVar(badge)}>{badge}</span>
               {/if}
             </button>
-
-            <div class="row-actions">
-              <button
-                class="row-btn"
-                title="Copy path"
-                aria-label="Copy path"
-                onclick={() => copyPathToClipboard(row.entry.path)}
-              >
-                <Copy size={12} strokeWidth={2} />
-              </button>
-              <button
-                class="row-btn"
-                title="Reveal in file manager"
-                aria-label="Reveal in file manager"
-                onclick={() => void revealInFileManager(row.entry.path).catch(() => {})}
-              >
-                <ExternalLink size={12} strokeWidth={2} />
-              </button>
-              <button
-                class="row-btn"
-                title="Rename"
-                aria-label="Rename"
-                onclick={() => startRename(row.entry)}
-              >
-                <Pencil size={12} strokeWidth={2} />
-              </button>
-              <button
-                class="row-btn"
-                title="Move to trash"
-                aria-label="Move to trash"
-                onclick={() => (confirmDeleteEntry = row.entry)}
-              >
-                <Trash2 size={12} strokeWidth={2} />
-              </button>
-            </div>
           {/if}
         </div>
       {/each}
@@ -357,6 +440,46 @@
         <button class="danger small-btn" onclick={handleConfirmDelete}>Delete</button>
         <button class="small-btn" onclick={() => (confirmDeleteEntry = null)}>Cancel</button>
       </div>
+    </div>
+  {/if}
+
+  {#if contextMenu}
+    <div
+      bind:this={contextMenuEl}
+      class="context-menu"
+      style:left="{contextMenu.x}px"
+      style:top="{contextMenu.y}px"
+      role="menu"
+      tabindex="-1"
+      oncontextmenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <button
+        class="context-menu-item"
+        role="menuitem"
+        onclick={() => handleMenuAction('copy-path')}
+      >
+        <Copy size={13} strokeWidth={2} />
+        <span>Copy Path</span>
+      </button>
+      <button class="context-menu-item" role="menuitem" onclick={() => handleMenuAction('reveal')}>
+        <ExternalLink size={13} strokeWidth={2} />
+        <span>Reveal in File Manager</span>
+      </button>
+      <button class="context-menu-item" role="menuitem" onclick={() => handleMenuAction('rename')}>
+        <Pencil size={13} strokeWidth={2} />
+        <span>Rename</span>
+      </button>
+      <button
+        class="context-menu-item danger"
+        role="menuitem"
+        onclick={() => handleMenuAction('trash')}
+      >
+        <Trash2 size={13} strokeWidth={2} />
+        <span>Move to Trash</span>
+      </button>
     </div>
   {/if}
 </aside>
@@ -449,12 +572,11 @@
     line-height: 28px;
     flex-shrink: 0;
     box-sizing: border-box;
-    padding-right: 4px;
+    padding-right: 6px;
     border-radius: var(--radius-ctrl);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 4px;
+    justify-content: flex-start;
   }
 
   .tree-row:hover,
@@ -465,6 +587,7 @@
   .row-main {
     flex: 1;
     min-width: 0;
+    width: 100%;
     height: 26px;
     line-height: 26px;
     box-sizing: border-box;
@@ -480,7 +603,6 @@
   }
 
   .entry-name {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -489,33 +611,70 @@
   }
 
   .git-badge {
+    margin-left: auto;
+    flex-shrink: 0;
     font-size: 11px;
     font-weight: 600;
-    padding: 0 2px;
+    padding: 0 4px;
   }
 
-  .row-actions {
+  .context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 180px;
+    background: var(--pn);
+    border: 1px solid var(--bd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-float);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    outline: none;
+    user-select: none;
+  }
+
+  .context-menu-item {
+    width: 100%;
+    height: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    border: none;
+    border-radius: var(--radius-ctrl);
+    background: transparent;
+    color: var(--tx);
+    font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 2px;
-    opacity: 0;
+    justify-content: flex-start;
+    gap: 8px;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
   }
 
-  .tree-row:hover .row-actions {
-    opacity: 1;
-  }
-
-  .row-btn {
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--dm);
-  }
-
-  .row-btn:hover {
+  .context-menu-item:hover {
+    background: var(--acs);
     color: var(--tx);
+  }
+
+  .context-menu-item.danger {
+    color: var(--de);
+  }
+
+  .context-menu-item.danger:hover {
+    background: rgba(224, 123, 123, 0.14);
+    color: var(--de);
+  }
+
+  button.danger {
+    background: var(--de);
+    border-color: var(--de);
+    color: #ffffff;
+  }
+
+  button.danger:hover {
+    opacity: 0.92;
   }
 
   .confirm-bar {
