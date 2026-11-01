@@ -659,21 +659,22 @@
   }
 
   .context-menu-item.danger {
+    background: transparent;
     color: var(--de);
   }
 
   .context-menu-item.danger:hover {
-    background: rgba(224, 123, 123, 0.14);
+    background: var(--des);
     color: var(--de);
   }
 
-  button.danger {
+  .confirm-actions button.danger {
     background: var(--de);
     border-color: var(--de);
     color: #ffffff;
   }
 
-  button.danger:hover {
+  .confirm-actions button.danger:hover {
     opacity: 0.92;
   }
 
