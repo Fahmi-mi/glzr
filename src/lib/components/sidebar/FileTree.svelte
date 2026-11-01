@@ -658,14 +658,16 @@
     color: var(--tx);
   }
 
-  .context-menu-item.danger {
-    background: transparent;
-    color: var(--de);
+  .context-menu-item.danger,
+  button.context-menu-item.danger {
+    background: transparent !important;
+    color: var(--de) !important;
   }
 
-  .context-menu-item.danger:hover {
-    background: var(--des);
-    color: var(--de);
+  .context-menu-item.danger:hover,
+  button.context-menu-item.danger:hover {
+    background: var(--des) !important;
+    color: var(--de) !important;
   }
 
   .confirm-actions button.danger {
