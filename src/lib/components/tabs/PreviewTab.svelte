@@ -274,7 +274,7 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
-    background: var(--bg);
+    background: transparent;
   }
 
   .preview-tab.hidden-preview {
@@ -282,7 +282,7 @@
   }
 
   .url-bar-shell {
-    padding: 16px 16px 12px;
+    padding: 12px 12px 10px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -294,8 +294,8 @@
     gap: 8px;
     padding: 6px 12px;
     border: 1px solid var(--bd);
-    border-radius: var(--radius-panel);
-    background: var(--sf);
+    border-radius: var(--radius-input);
+    background: var(--el);
     color: var(--dm);
   }
 
@@ -337,6 +337,7 @@
 
   .url-input:focus {
     outline: none;
+    box-shadow: none;
   }
 
   .url-error {
@@ -350,7 +351,7 @@
     display: flex;
     min-width: 0;
     min-height: 0;
-    padding: 0 16px 16px;
+    padding: 0 12px 12px;
   }
 
   .preview-frame {
@@ -358,8 +359,8 @@
     width: 100%;
     height: 100%;
     border: 1px solid var(--bd);
-    border-radius: var(--radius-panel);
-    background: var(--sf);
+    border-radius: var(--radius-menu);
+    background: var(--el);
   }
 
   .offline-card {
@@ -370,8 +371,8 @@
     justify-content: center;
     gap: 16px;
     border: 1px solid var(--bd);
-    border-radius: var(--radius-panel);
-    background: var(--sf);
+    border-radius: var(--radius-menu);
+    background: var(--el);
     padding: 24px;
   }
 

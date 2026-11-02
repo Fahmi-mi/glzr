@@ -131,8 +131,6 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="palette-backdrop" onclick={onClose}>
     <div
       class="palette-card"
@@ -191,7 +189,9 @@
   .palette-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--backdrop-bg);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    backdrop-filter: var(--backdrop-blur);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -201,9 +201,11 @@
 
   .palette-card {
     width: 100%;
-    max-width: 560px;
-    background: var(--el);
-    border: 1px solid var(--bd);
+    max-width: 520px;
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
     border-radius: var(--radius-dialog);
     box-shadow: var(--shadow-float);
     overflow: hidden;
@@ -212,7 +214,7 @@
   }
 
   .palette-header {
-    padding: 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
@@ -230,21 +232,22 @@
 
   .palette-input:focus {
     outline: none;
+    box-shadow: none;
   }
 
   .palette-list {
     list-style: none;
     max-height: 360px;
     overflow-y: auto;
-    padding: 6px 0;
+    padding: 6px;
   }
 
   .palette-row {
     width: 100%;
-    height: 36px;
-    padding: 0 16px;
+    height: 34px;
+    padding: 0 12px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--tx);
     display: flex;
@@ -281,10 +284,10 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--dm);
-    background: var(--pn);
+    background: var(--el);
     border: 1px solid var(--bd);
-    border-radius: 4px;
-    padding: 1px 6px;
+    border-radius: 6px;
+    padding: 2px 6px;
   }
 
   .category-tag {

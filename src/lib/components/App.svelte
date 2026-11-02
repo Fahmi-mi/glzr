@@ -1228,12 +1228,10 @@
             {/if}
           </div>
 
-          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <div
             class="sidebar-resizer"
             class:active={draggingSidebar}
-            role="separator"
-            aria-orientation="vertical"
+            role="presentation"
             onmousedown={startSidebarResize}
           ></div>
         </div>
@@ -1409,11 +1407,15 @@
 
 <style>
   .app-shell {
+    position: relative;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     width: 100vw;
     height: 100vh;
-    background: var(--bg);
+    padding: var(--gap);
+    gap: var(--gap);
+    background: var(--page);
     color: var(--tx);
   }
 
@@ -1428,9 +1430,12 @@
   .welcome-card {
     width: 100%;
     max-width: 420px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
+    background: var(--pbg);
+    -webkit-backdrop-filter: var(--pblur);
+    backdrop-filter: var(--pblur);
+    border: 1px solid var(--pbd);
     border-radius: var(--radius-dialog);
+    box-shadow: var(--shadow-float);
     padding: 24px;
     display: flex;
     flex-direction: column;
@@ -1483,6 +1488,7 @@
     padding: 0 8px;
     justify-content: flex-start;
     border: none;
+    background: transparent;
     color: var(--dm);
   }
 
@@ -1501,9 +1507,14 @@
 
   .workspace-bar {
     height: 40px;
-    padding: 0 16px;
-    background: var(--pn);
-    border-bottom: 1px solid var(--bd);
+    flex: none;
+    padding: 0 7px;
+    background: var(--cbg);
+    -webkit-backdrop-filter: var(--cblur);
+    backdrop-filter: var(--cblur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--psh);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1513,13 +1524,14 @@
   .workspace-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
   }
 
   .ws-pill {
     display: flex;
     align-items: center;
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-input);
+    overflow: hidden;
   }
 
   .ws-pill.active {
@@ -1528,10 +1540,16 @@
 
   .workspace-item {
     height: 26px;
-    padding: 4px 10px;
+    padding: 4px 12px;
     border: none;
+    border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
+  }
+
+  .workspace-item:hover {
+    background: transparent;
+    color: var(--tx);
   }
 
   .workspace-item.active {
@@ -1540,11 +1558,11 @@
 
   .ws-modal-input {
     width: 100%;
-    height: 32px;
-    padding: 0 10px;
-    background: var(--sf);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    height: 36px;
+    padding: 0 12px;
+    background: var(--el);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-input);
     color: var(--tx);
     font-size: 13px;
   }
@@ -1552,6 +1570,7 @@
   .ws-modal-input:focus {
     outline: none;
     border-color: var(--ac);
+    box-shadow: 0 0 0 3px var(--acs);
   }
 
   .ws-close-btn {
@@ -1560,6 +1579,7 @@
     padding: 0;
     margin-right: 4px;
     border: none;
+    border-radius: 6px;
     background: transparent;
     color: var(--dm);
     opacity: 0;
@@ -1573,7 +1593,14 @@
     height: 26px;
     padding: 4px 10px;
     border: none;
+    border-radius: var(--radius-input);
+    background: transparent;
     color: var(--dm);
+  }
+
+  .folder-switch:hover {
+    background: var(--el);
+    color: var(--tx);
   }
 
   .icon-btn {
@@ -1581,14 +1608,26 @@
     height: 26px;
     padding: 0;
     border: none;
+    border-radius: var(--radius-input);
+    background: transparent;
     color: var(--dm);
   }
 
-  .session-notice-bar {
-    height: 30px;
-    padding: 0 16px;
+  .icon-btn:hover {
     background: var(--el);
-    border-bottom: 1px solid var(--bd);
+    color: var(--tx);
+  }
+
+  .session-notice-bar {
+    height: 32px;
+    flex: none;
+    padding: 0 16px;
+    background: var(--pbg);
+    -webkit-backdrop-filter: var(--pblur);
+    backdrop-filter: var(--pblur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-menu);
+    box-shadow: var(--psh);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1597,34 +1636,39 @@
   }
 
   .small-btn {
-    height: 22px;
-    padding: 0 8px;
+    height: 24px;
+    padding: 0 10px;
     font-size: 12px;
   }
 
   .workbench {
     flex: 1;
     display: flex;
+    gap: var(--gap);
     min-height: 0;
   }
 
   .sidebar-shell {
     position: relative;
     height: 100%;
-    border-right: 1px solid var(--bd);
     flex-shrink: 0;
     min-height: 0;
-    background: var(--pn);
+    background: var(--cbg);
+    -webkit-backdrop-filter: var(--cblur);
+    backdrop-filter: var(--cblur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--psh);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .sidebar-tabs-bar {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 8px 10px 6px;
-    border-bottom: 1px solid var(--bd);
+    padding: 12px 8px 8px;
   }
 
   .sidebar-tab-btn {
@@ -1634,7 +1678,12 @@
     border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--dm);
-    font-size: 12px;
+    font-size: 13px;
+  }
+
+  .sidebar-tab-btn:hover {
+    background: var(--el);
+    color: var(--tx);
   }
 
   .sidebar-tab-btn.active {
@@ -1653,16 +1702,17 @@
   .sidebar-resizer {
     position: absolute;
     top: 0;
-    right: -3px;
+    right: 0;
     bottom: 0;
     width: 6px;
     cursor: col-resize;
     z-index: 25;
+    background: transparent;
   }
 
   .sidebar-resizer:hover,
   .sidebar-resizer.active {
-    background: var(--ac);
+    background: var(--acs);
   }
 
   .workspaces-stage {
@@ -1690,10 +1740,15 @@
   }
 
   .status-bar {
-    height: 28px;
+    height: 34px;
+    flex: none;
     padding: 0 16px;
-    background: var(--pn);
-    border-top: 1px solid var(--bd);
+    background: var(--cbg);
+    -webkit-backdrop-filter: var(--cblur);
+    backdrop-filter: var(--cblur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--psh);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1718,7 +1773,9 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--backdrop-bg);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    backdrop-filter: var(--backdrop-blur);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1728,18 +1785,21 @@
 
   .confirm-dialog {
     width: 100%;
-    max-width: 400px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
+    max-width: 420px;
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
     border-radius: var(--radius-dialog);
-    padding: 20px;
+    box-shadow: var(--shadow-float);
+    padding: 24px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
   }
 
   .confirm-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--tx);
   }
@@ -1749,5 +1809,11 @@
     justify-content: flex-end;
     gap: 8px;
     padding-top: 4px;
+  }
+
+  .confirm-actions button.danger {
+    background: var(--de);
+    border-color: transparent;
+    color: #ffffff;
   }
 </style>

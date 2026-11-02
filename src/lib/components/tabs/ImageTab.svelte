@@ -99,8 +99,8 @@
     max-height: 100%;
     object-fit: contain;
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
-    background: var(--pn);
+    border-radius: var(--radius-menu);
+    background: var(--el);
   }
 
   .image-meta {

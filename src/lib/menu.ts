@@ -3,10 +3,6 @@ export interface MenuPosition {
   y: number;
 }
 
-/**
- * Computes clamped coordinates for a floating context menu ensuring it stays
- * within viewport bounds with a safety margin.
- */
 export function clampMenuCoordinates(
   clientX: number,
   clientY: number,

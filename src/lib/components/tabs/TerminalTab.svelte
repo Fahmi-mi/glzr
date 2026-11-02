@@ -42,7 +42,14 @@
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   }
 
-  // svelte-ignore state_referenced_locally
+  function buildXtermTheme(mode: 'dark' | 'light') {
+    const base = getTerminalTheme(mode);
+    return {
+      ...base,
+      background: 'rgba(0, 0, 0, 0)'
+    };
+  }
+
   let activeSessionId = $state(`${sessionId}:${generateSessionToken()}`);
   let restarting = $state(false);
   let hostEl = $state<HTMLDivElement | null>(null);
@@ -76,7 +83,7 @@
         fitAddon.fit();
         void ptyResize(activeSessionId, term.cols, term.rows).catch(() => {});
       } catch {
-        // Ignore transient layout state
+        return;
       }
     }, 40);
   }
@@ -99,7 +106,7 @@
       }
       term.paste(text);
     } catch {
-      // Clipboard read denied or empty
+      return;
     }
   }
 
@@ -139,7 +146,7 @@
       try {
         fitAddon?.fit();
       } catch {
-        // Ignore transient fit error
+        return;
       }
       await spawnShell();
     } finally {
@@ -161,12 +168,12 @@
     const activeCanvas = canvasAddon;
     if (!activeTerm) return;
 
-    activeTerm.options.theme = getTerminalTheme(activeTheme);
+    activeTerm.options.theme = buildXtermTheme(activeTheme);
     activeCanvas?.clearTextureAtlas();
     try {
       activeTerm.refresh(0, Math.max(0, activeTerm.rows - 1));
     } catch {
-      // Ignore during transient state
+      return;
     }
   });
 
@@ -178,12 +185,13 @@
       cursorStyle: 'block',
       scrollback: 5000,
       allowProposedApi: true,
+      allowTransparency: true,
       fontFamily:
         "'JetBrains Mono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize,
       lineHeight: 1.35,
       smoothScrollDuration: 0,
-      theme: getTerminalTheme(theme)
+      theme: buildXtermTheme(theme)
     });
 
     const fit = new FitAddon();
@@ -211,7 +219,7 @@
       canvasAddon = addon;
       instance.loadAddon(addon);
     } catch {
-      // Fallback to default DOM renderer
+      canvasAddon = null;
     }
 
     instance.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
@@ -282,7 +290,7 @@
     try {
       fit.fit();
     } catch {
-      // Ignore initial fit error
+      fitAddon = fit;
     }
 
     unlistenOutput = await onBackendEvent('pty:output', (payload) => {
@@ -441,7 +449,7 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    background: var(--bg);
+    background: transparent;
     padding: 8px 12px;
   }
 
@@ -463,9 +471,12 @@
     z-index: 20;
     height: 30px;
     padding: 0 8px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-input);
+    box-shadow: var(--shadow-float);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -484,6 +495,7 @@
 
   .search-input:focus {
     outline: none;
+    box-shadow: none;
   }
 
   .icon-btn {
@@ -498,7 +510,7 @@
   .terminal-banner {
     min-height: 32px;
     padding: 4px 12px;
-    background: var(--pn);
+    background: var(--el);
     border: 1px solid var(--bd);
     border-radius: var(--radius-ctrl);
     display: flex;
@@ -543,9 +555,12 @@
     z-index: 15;
     display: flex;
     align-items: center;
-    background: var(--el);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-input);
+    box-shadow: var(--shadow-float);
     padding: 2px;
   }
 

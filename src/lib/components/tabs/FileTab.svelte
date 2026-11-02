@@ -101,7 +101,7 @@
   const glzrEditorTheme = EditorView.theme({
     '&': {
       height: '100%',
-      backgroundColor: 'var(--bg)',
+      backgroundColor: 'transparent',
       color: 'var(--tx)',
       fontFamily: 'var(--font-mono)',
       fontSize: 'var(--font-size-code)',
@@ -114,22 +114,18 @@
       overscrollBehavior: 'contain',
       WebkitOverflowScrolling: 'touch',
       WebkitFontSmoothing: 'antialiased',
-      scrollBehavior: 'auto'
+      scrollBehavior: 'auto',
+      willChange: 'scroll-position',
+      transform: 'translateZ(0)'
     },
     '.cm-line': {
-      lineHeight: '24px',
-      height: '24px',
-      minHeight: '24px',
-      boxSizing: 'border-box'
+      lineHeight: '24px'
     },
     '.cm-lineNumbers': {
       contain: 'layout style'
     },
     '.cm-lineNumbers .cm-gutterElement': {
       lineHeight: '24px',
-      height: '24px',
-      minHeight: '24px',
-      boxSizing: 'border-box',
       minWidth: '32px',
       textAlign: 'right'
     },
@@ -145,7 +141,7 @@
       backgroundColor: 'var(--acs)'
     },
     '.cm-gutters': {
-      backgroundColor: 'var(--bg)',
+      backgroundColor: 'transparent',
       color: 'var(--ft)',
       border: 'none',
       paddingLeft: '16px',
@@ -168,7 +164,7 @@
       outline: '1px solid var(--ac)'
     },
     '.cm-panels': {
-      backgroundColor: 'var(--pn)',
+      backgroundColor: 'var(--el)',
       color: 'var(--tx)',
       borderBottom: '1px solid var(--bd)'
     },
@@ -185,7 +181,7 @@
       backgroundColor: 'var(--el)',
       color: 'var(--tx)',
       border: '1px solid var(--bd)',
-      borderRadius: '5px',
+      borderRadius: 'var(--radius-input)',
       padding: '2px 8px',
       fontSize: '12px'
     },
@@ -194,7 +190,7 @@
       backgroundColor: 'var(--el)',
       color: 'var(--tx)',
       border: '1px solid var(--bd)',
-      borderRadius: '5px',
+      borderRadius: 'var(--radius-ctrl)',
       padding: '2px 8px',
       fontSize: '12px',
       cursor: 'pointer'
@@ -470,7 +466,7 @@
           externalConflict = latest;
         }
       } catch {
-        // File may have been deleted or moved
+        return;
       }
     });
   });
@@ -608,7 +604,7 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    background: var(--bg);
+    background: transparent;
   }
 
   .state-box {
@@ -624,7 +620,7 @@
   .sub-bar {
     height: 32px;
     padding: 0 16px;
-    background: var(--pn);
+    background: var(--el);
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
@@ -659,7 +655,7 @@
   .notice-bar {
     min-height: 30px;
     padding: 4px 16px;
-    background: var(--pn);
+    background: var(--el);
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;

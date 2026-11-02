@@ -235,13 +235,13 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    background: var(--bg);
+    background: transparent;
   }
 
   .diff-toolbar {
     height: 36px;
     padding: 0 16px;
-    background: var(--pn);
+    background: transparent;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
@@ -322,9 +322,9 @@
 
   .hunk-card {
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-menu);
     overflow: hidden;
-    background: var(--pn);
+    background: var(--el);
   }
 
   .hunk-header {
@@ -355,7 +355,7 @@
   .hunk-lines {
     display: flex;
     flex-direction: column;
-    background: var(--bg);
+    background: transparent;
   }
 
   .diff-line {

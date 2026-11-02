@@ -100,7 +100,6 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="modal-backdrop"
     onmousedown={(e) => {
@@ -154,28 +153,32 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--backdrop-bg);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    backdrop-filter: var(--backdrop-blur);
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 72px;
+    padding-top: 84px;
     z-index: 100;
   }
 
   .quick-open-dialog {
     width: 100%;
     max-width: 520px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
     border-radius: var(--radius-dialog);
+    box-shadow: var(--shadow-float);
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
 
   .search-header {
-    height: 40px;
-    padding: 0 12px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
@@ -185,7 +188,7 @@
 
   .search-input {
     flex: 1;
-    height: 28px;
+    height: 24px;
     border: none;
     background: transparent;
     color: var(--tx);
@@ -195,6 +198,7 @@
 
   .search-input:focus {
     outline: none;
+    box-shadow: none;
   }
 
   .line-badge {
@@ -209,7 +213,7 @@
   .results-list {
     max-height: 320px;
     overflow-y: auto;
-    padding: 4px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -217,8 +221,8 @@
 
   .result-row {
     width: 100%;
-    height: 30px;
-    padding: 0 10px;
+    height: 34px;
+    padding: 0 12px;
     border: none;
     border-radius: var(--radius-ctrl);
     background: transparent;

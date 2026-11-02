@@ -254,7 +254,6 @@
     <div class="branch-bar">
       <div class="branch-selector">
         {#if branchesData && branchesData.branches.length > 0 && !statusData.detached}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="branch-dropdown"
             bind:this={dropdownContainerEl}
@@ -466,14 +465,14 @@
   .git-panel {
     width: 100%;
     height: 100%;
-    background: var(--pn);
+    background: transparent;
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
 
   .panel-header {
-    height: 36px;
+    height: 32px;
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -592,9 +591,11 @@
     max-width: 280px;
     max-height: 220px;
     overflow-y: auto;
-    background: var(--pn);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-panel);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-menu);
     box-shadow: var(--shadow-float);
     z-index: 50;
     padding: 4px;
@@ -792,8 +793,10 @@
 
   .discard-confirm-box {
     padding: 8px 12px;
-    background: var(--el);
-    border-top: 1px solid var(--bd);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border-top: 1px solid var(--pbd);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -829,10 +832,10 @@
     width: 100%;
     height: 32px;
     padding: 0 10px;
-    background: var(--bg);
+    background: var(--el);
     color: var(--tx);
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-input);
     font-size: 12px;
   }
 

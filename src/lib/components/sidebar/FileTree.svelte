@@ -66,6 +66,17 @@
   let contextMenu = $state<ContextMenuState | null>(null);
   let contextMenuEl = $state<HTMLElement | null>(null);
 
+  function portal(node: HTMLElement) {
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(node);
+    }
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
   const flatRows = $derived.by<TreeRow[]>(() => {
     const out: TreeRow[] = [];
     function walk(dirKey: string, depth: number) {
@@ -445,6 +456,7 @@
 
   {#if contextMenu}
     <div
+      use:portal
       bind:this={contextMenuEl}
       class="context-menu"
       style:left="{contextMenu.x}px"
@@ -488,7 +500,7 @@
   .file-tree-panel {
     width: 100%;
     height: 100%;
-    background: var(--pn);
+    background: transparent;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -496,7 +508,7 @@
   }
 
   .panel-header {
-    height: 36px;
+    height: 32px;
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -560,7 +572,7 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 4px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -579,7 +591,10 @@
     justify-content: flex-start;
   }
 
-  .tree-row:hover,
+  .tree-row:hover {
+    background: var(--el);
+  }
+
   .tree-row.selected {
     background: var(--acs);
   }
@@ -602,6 +617,10 @@
     text-align: left;
   }
 
+  .row-main:hover {
+    background: transparent;
+  }
+
   .entry-name {
     min-width: 0;
     overflow: hidden;
@@ -621,12 +640,14 @@
   .context-menu {
     position: fixed;
     z-index: 1000;
-    min-width: 180px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-panel);
+    min-width: 185px;
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-menu);
     box-shadow: var(--shadow-float);
-    padding: 4px;
+    padding: 5px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -682,8 +703,10 @@
 
   .confirm-bar {
     padding: 8px 12px;
-    background: var(--el);
-    border-top: 1px solid var(--bd);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border-top: 1px solid var(--pbd);
     display: flex;
     flex-direction: column;
     gap: 6px;

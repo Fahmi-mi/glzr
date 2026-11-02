@@ -313,14 +313,14 @@
   .search-panel {
     width: 100%;
     height: 100%;
-    background: var(--pn);
+    background: transparent;
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
 
   .panel-header {
-    height: 36px;
+    height: 32px;
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -350,9 +350,9 @@
   .input-row {
     height: 30px;
     padding: 0 8px;
-    background: var(--bg);
+    background: var(--el);
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-input);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -372,6 +372,7 @@
 
   .search-input:focus {
     outline: none;
+    box-shadow: none;
   }
 
   .clear-btn {
@@ -394,9 +395,9 @@
     min-width: 0;
     height: 26px;
     padding: 0 8px;
-    background: var(--bg);
+    background: var(--el);
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-input);
     color: var(--tx);
     font-size: 11px;
   }

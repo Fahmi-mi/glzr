@@ -60,7 +60,6 @@ describe('layout tree pure operations and session migration', () => {
     expect(findDirectionalNeighborPane(root, 'ws-1-pane-3', 'up')).toBe('ws-1-pane-2');
     expect(findDirectionalNeighborPane(root, 'ws-1-pane-2', 'left')).toBe('ws-1-pane-1');
 
-    // Move tab-3 from pane-3 into pane-1; pane-3 becomes empty and collapses
     const afterMove = moveTabBetweenPanes(root, 'ws-1-pane-3', 'tab-3', 'ws-1-pane-1');
     const panes = listAllPanes(afterMove);
     expect(panes.map((p) => p.id)).toEqual(['ws-1-pane-1', 'ws-1-pane-2']);
@@ -150,19 +149,14 @@ describe('layout tree pure operations and session migration', () => {
   });
 
   it('determines the next sequential workspace number correctly', () => {
-    // Initial single workspace with default name
     expect(getNextWorkspaceNumber([{ name: '1' }])).toBe(2);
 
-    // Sequential numerical workspaces
     expect(getNextWorkspaceNumber([{ name: '1' }, { name: '2' }])).toBe(3);
 
-    // Renamed workspace without numeric digits
     expect(getNextWorkspaceNumber([{ name: 'Backend' }])).toBe(2);
 
-    // Renamed workspace along with sequential numbered workspace
     expect(getNextWorkspaceNumber([{ name: 'Backend' }, { name: '2' }])).toBe(3);
 
-    // Gapped workspace numbers
     expect(getNextWorkspaceNumber([{ name: '1' }, { name: '3' }])).toBe(4);
   });
 });
