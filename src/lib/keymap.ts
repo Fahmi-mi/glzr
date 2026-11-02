@@ -92,6 +92,16 @@ export function resolveGlobalShortcut(
     if (matchesKeyCombo(event, 'Ctrl+W')) {
       return 'close_tab';
     }
+    const ctrlOrMeta = (event.ctrlKey || event.metaKey) && !event.altKey;
+    if (ctrlOrMeta && (event.key === '=' || event.key === '+')) {
+      return 'zoom_in';
+    }
+    if (ctrlOrMeta && (event.key === '-' || event.key === '_')) {
+      return 'zoom_out';
+    }
+    if (ctrlOrMeta && (event.key === '0' || event.key === ')')) {
+      return 'zoom_reset';
+    }
   }
 
   const altOnly = event.altKey && !event.ctrlKey && !event.metaKey;

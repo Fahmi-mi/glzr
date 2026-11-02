@@ -1,16 +1,15 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Copy from '@lucide/svelte/icons/copy';
   import ExternalLink from '@lucide/svelte/icons/external-link';
-  import File from '@lucide/svelte/icons/file';
   import FilePlus from '@lucide/svelte/icons/file-plus';
   import Folder from '@lucide/svelte/icons/folder';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import FolderPlus from '@lucide/svelte/icons/folder-plus';
-  import Image from '@lucide/svelte/icons/image';
   import Pencil from '@lucide/svelte/icons/pencil';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Trash2 from '@lucide/svelte/icons/trash-2';
+  import FileIcon from '$lib/components/icons/FileIcon.svelte';
   import {
     fsCreateDir,
     fsCreateFile,
@@ -23,6 +22,7 @@
     type GitBadge
   } from '$lib/ipc';
   import { badgeColorVar } from '$lib/git';
+  import { clampMenuCoordinates } from '$lib/menu';
 
   interface Props {
     workspaceRoot: string;
@@ -56,6 +56,26 @@
   let confirmDeleteEntry = $state<DirEntryDto | null>(null);
   let treeContainerEl = $state<HTMLElement | null>(null);
 
+  interface ContextMenuState {
+    x: number;
+    y: number;
+    entry: DirEntryDto;
+  }
+
+  let contextMenu = $state<ContextMenuState | null>(null);
+  let contextMenuEl = $state<HTMLElement | null>(null);
+
+  function portal(node: HTMLElement) {
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(node);
+    }
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
   const flatRows = $derived.by<TreeRow[]>(() => {
     const out: TreeRow[] = [];
     function walk(dirKey: string, depth: number) {
@@ -70,13 +90,6 @@
     walk('', 0);
     return out;
   });
-
-  function isImageFilename(name: string): boolean {
-    const dotIdx = name.lastIndexOf('.');
-    if (dotIdx <= 0) return false;
-    const ext = name.slice(dotIdx + 1).toLowerCase();
-    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'svg'].includes(ext);
-  }
 
   async function loadDirEntries(dirKey: string) {
     try {
@@ -212,6 +225,109 @@
   function copyPathToClipboard(path: string) {
     void navigator.clipboard.writeText(path).catch(() => {});
   }
+
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function handleRowContextMenu(e: MouseEvent, entry: DirEntryDto) {
+    if (renamingEntry?.path === entry.path) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectedPath = entry.path;
+    creatingMode = null;
+    confirmDeleteEntry = null;
+
+    const winW = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const winH = typeof window !== 'undefined' ? window.innerHeight : 768;
+    const initialPos = clampMenuCoordinates(e.clientX, e.clientY, 180, 130, winW, winH);
+
+    contextMenu = {
+      x: initialPos.x,
+      y: initialPos.y,
+      entry
+    };
+
+    void tick().then(() => {
+      if (contextMenuEl && contextMenu) {
+        const rect = contextMenuEl.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const currentWinW = typeof window !== 'undefined' ? window.innerWidth : winW;
+          const currentWinH = typeof window !== 'undefined' ? window.innerHeight : winH;
+          const refined = clampMenuCoordinates(
+            e.clientX,
+            e.clientY,
+            rect.width,
+            rect.height,
+            currentWinW,
+            currentWinH
+          );
+          if (refined.x !== contextMenu.x || refined.y !== contextMenu.y) {
+            contextMenu = { ...contextMenu, x: refined.x, y: refined.y };
+          }
+        }
+      }
+    });
+  }
+
+  function handleMenuAction(action: 'copy-path' | 'reveal' | 'rename' | 'trash') {
+    if (!contextMenu) return;
+    const entry = contextMenu.entry;
+    closeContextMenu();
+
+    switch (action) {
+      case 'copy-path':
+        copyPathToClipboard(entry.path);
+        break;
+      case 'reveal':
+        void revealInFileManager(entry.path).catch(() => {});
+        break;
+      case 'rename':
+        startRename(entry);
+        break;
+      case 'trash':
+        confirmDeleteEntry = entry;
+        break;
+    }
+  }
+
+  $effect(() => {
+    if (!contextMenu) return;
+
+    function handlePointerDown(e: MouseEvent | PointerEvent) {
+      if (contextMenuEl && !contextMenuEl.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeContextMenu();
+      }
+    }
+
+    function handleBlurOrResize() {
+      closeContextMenu();
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlurOrResize);
+    window.addEventListener('resize', handleBlurOrResize);
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlurOrResize);
+      window.removeEventListener('resize', handleBlurOrResize);
+    };
+  });
 </script>
 
 <aside class="file-tree-panel" bind:this={treeContainerEl} tabindex="-1">
@@ -267,7 +383,7 @@
     </div>
   {/if}
 
-  <div class="tree-scroll">
+  <div class="tree-scroll" onscroll={closeContextMenu}>
     {#if flatRows.length === 0}
       <div class="empty-box">Folder is empty</div>
     {:else}
@@ -277,12 +393,17 @@
           class="tree-row"
           class:selected={selectedPath === row.entry.path}
           style:padding-left="{8 + row.depth * 14}px"
+          role="treeitem"
+          aria-selected={selectedPath === row.entry.path}
+          tabindex="-1"
+          oncontextmenu={(e) => handleRowContextMenu(e, row.entry)}
         >
           {#if renamingEntry?.path === row.entry.path}
             <input
               bind:value={renameInput}
               type="text"
               class="inline-input"
+              use:focusAndSelect
               onblur={() => void submitRename()}
               onkeydown={(e) => {
                 if (e.key === 'Enter') void submitRename();
@@ -297,51 +418,14 @@
                 {:else}
                   <Folder size={14} strokeWidth={2} />
                 {/if}
-              {:else if isImageFilename(row.entry.name)}
-                <Image size={14} strokeWidth={2} />
               {:else}
-                <File size={14} strokeWidth={2} />
+                <FileIcon filename={row.entry.name} size={14} />
               {/if}
               <span class="entry-name">{row.entry.name}</span>
               {#if badge}
                 <span class="git-badge mono" style:color={badgeColorVar(badge)}>{badge}</span>
               {/if}
             </button>
-
-            <div class="row-actions">
-              <button
-                class="row-btn"
-                title="Copy path"
-                aria-label="Copy path"
-                onclick={() => copyPathToClipboard(row.entry.path)}
-              >
-                <Copy size={12} strokeWidth={2} />
-              </button>
-              <button
-                class="row-btn"
-                title="Reveal in file manager"
-                aria-label="Reveal in file manager"
-                onclick={() => void revealInFileManager(row.entry.path).catch(() => {})}
-              >
-                <ExternalLink size={12} strokeWidth={2} />
-              </button>
-              <button
-                class="row-btn"
-                title="Rename"
-                aria-label="Rename"
-                onclick={() => startRename(row.entry)}
-              >
-                <Pencil size={12} strokeWidth={2} />
-              </button>
-              <button
-                class="row-btn"
-                title="Move to trash"
-                aria-label="Move to trash"
-                onclick={() => (confirmDeleteEntry = row.entry)}
-              >
-                <Trash2 size={12} strokeWidth={2} />
-              </button>
-            </div>
           {/if}
         </div>
       {/each}
@@ -359,13 +443,54 @@
       </div>
     </div>
   {/if}
+
+  {#if contextMenu}
+    <div
+      use:portal
+      bind:this={contextMenuEl}
+      class="context-menu"
+      style:left="{contextMenu.x}px"
+      style:top="{contextMenu.y}px"
+      role="menu"
+      tabindex="-1"
+      oncontextmenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <button
+        class="context-menu-item"
+        role="menuitem"
+        onclick={() => handleMenuAction('copy-path')}
+      >
+        <Copy size={13} strokeWidth={2} />
+        <span>Copy Path</span>
+      </button>
+      <button class="context-menu-item" role="menuitem" onclick={() => handleMenuAction('reveal')}>
+        <ExternalLink size={13} strokeWidth={2} />
+        <span>Reveal in File Manager</span>
+      </button>
+      <button class="context-menu-item" role="menuitem" onclick={() => handleMenuAction('rename')}>
+        <Pencil size={13} strokeWidth={2} />
+        <span>Rename</span>
+      </button>
+      <button
+        class="context-menu-item danger"
+        role="menuitem"
+        onclick={() => handleMenuAction('trash')}
+      >
+        <Trash2 size={13} strokeWidth={2} />
+        <span>Move to Trash</span>
+      </button>
+    </div>
+  {/if}
 </aside>
 
 <style>
   .file-tree-panel {
     width: 100%;
     height: 100%;
-    background: var(--pn);
+    background: transparent;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -373,7 +498,8 @@
   }
 
   .panel-header {
-    height: 36px;
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -382,7 +508,7 @@
   }
 
   .panel-title {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
   }
@@ -394,12 +520,23 @@
   }
 
   .icon-btn {
-    width: 24px;
-    height: 24px;
-    padding: 0;
+    width: auto;
+    min-width: calc(24px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
+    padding: 2px;
     border: none;
     background: transparent;
     color: var(--dm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-btn :global(svg) {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
   }
 
   .error-banner {
@@ -407,7 +544,7 @@
     background: var(--des);
     border-bottom: 1px solid var(--bd);
     color: var(--de);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .inline-form {
@@ -421,15 +558,17 @@
   .inline-input {
     flex: 1;
     min-width: 0;
-    height: 24px;
-    padding: 0 6px;
-    font-size: 12px;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    padding: 0 8px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .small-btn {
-    height: 24px;
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
     padding: 0 8px;
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .tree-scroll {
@@ -437,27 +576,28 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 4px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
     gap: 1px;
   }
 
   .tree-row {
-    height: 28px;
-    min-height: 28px;
-    line-height: 28px;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
     flex-shrink: 0;
     box-sizing: border-box;
-    padding-right: 4px;
+    padding-right: 6px;
     border-radius: var(--radius-ctrl);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 4px;
+    justify-content: flex-start;
   }
 
-  .tree-row:hover,
+  .tree-row:hover {
+    background: var(--el);
+  }
+
   .tree-row.selected {
     background: var(--acs);
   }
@@ -465,70 +605,131 @@
   .row-main {
     flex: 1;
     min-width: 0;
-    height: 26px;
-    line-height: 26px;
+    width: 100%;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    line-height: normal;
     box-sizing: border-box;
-    padding: 0 4px;
+    padding: 2px 4px;
     border: none;
     background: transparent;
     color: var(--tx);
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     text-align: left;
   }
 
+  .row-main :global(svg) {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
+  }
+
+  .row-main:hover {
+    background: transparent;
+  }
+
   .entry-name {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .git-badge {
-    font-size: 11px;
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: var(--font-size-ui-sm, 12px);
     font-weight: 600;
-    padding: 0 2px;
+    padding: 0 4px;
   }
 
-  .row-actions {
+  .context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 185px;
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-menu);
+    box-shadow: var(--shadow-float);
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    outline: none;
+    user-select: none;
+  }
+
+  .context-menu-item {
+    width: 100%;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    padding: 2px calc(8px * var(--ui-scale, 1));
+    border: none;
+    border-radius: var(--radius-ctrl);
+    background: transparent;
+    color: var(--tx);
+    font-size: var(--font-size-ui, 13px);
     display: flex;
     align-items: center;
-    gap: 2px;
-    opacity: 0;
+    justify-content: flex-start;
+    gap: calc(8px * var(--ui-scale, 1));
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
   }
 
-  .tree-row:hover .row-actions {
-    opacity: 1;
+  .context-menu-item :global(svg) {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
   }
 
-  .row-btn {
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--dm);
-  }
-
-  .row-btn:hover {
+  .context-menu-item:hover {
+    background: var(--acs);
     color: var(--tx);
+  }
+
+  .context-menu-item.danger,
+  button.context-menu-item.danger {
+    background: transparent !important;
+    color: var(--de) !important;
+  }
+
+  .context-menu-item.danger:hover,
+  button.context-menu-item.danger:hover {
+    background: var(--des) !important;
+    color: var(--de) !important;
+  }
+
+  .confirm-actions button.danger {
+    background: var(--de);
+    border-color: var(--de);
+    color: #ffffff;
+  }
+
+  .confirm-actions button.danger:hover {
+    opacity: 0.92;
   }
 
   .confirm-bar {
     padding: 8px 12px;
-    background: var(--el);
-    border-top: 1px solid var(--bd);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border-top: 1px solid var(--pbd);
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
 
   .confirm-text {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
     word-break: break-all;
   }
@@ -543,7 +744,7 @@
     flex-shrink: 0;
     box-sizing: border-box;
     padding: 16px 12px;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
     text-align: center;
   }

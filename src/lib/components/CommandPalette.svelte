@@ -1,80 +1,40 @@
 <script lang="ts">
-  import { fsListWorkspaceFiles } from '$lib/ipc';
   import { filterPaletteEntries, type PaletteEntry } from '$lib/keymap';
 
   interface Props {
     open: boolean;
-    workspaceRoot: string | null;
     actions: PaletteEntry[];
-    onSelectFile: (fullPath: string, line: number | null) => void;
     onClose: () => void;
   }
 
-  let { open, workspaceRoot, actions, onSelectFile, onClose }: Props = $props();
+  let { open, actions, onClose }: Props = $props();
 
   let query = $state('');
-  let filePaths = $state<string[]>([]);
   let selectedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | null>(null);
+  let listEl = $state<HTMLUListElement | null>(null);
 
   const combinedEntries = $derived.by<PaletteEntry[]>(() => {
-    const parsedQuery = parseFileLineQuery(query);
-    const trimmed = parsedQuery.filePart.trim();
-
-    if (!workspaceRoot || filePaths.length === 0) {
-      return filterPaletteEntries(actions, trimmed);
-    }
-
-    const fileEntries: PaletteEntry[] = filePaths.map((relPath) => ({
-      id: `file:${relPath}`,
-      label: relPath,
-      category: 'File',
-      run: () => {
-        onSelectFile(`${workspaceRoot}/${relPath}`, parsedQuery.line);
-      }
-    }));
-
-    if (!trimmed) {
-      return [...actions, ...fileEntries.slice(0, 25)].slice(0, 60);
-    }
-
-    return filterPaletteEntries([...actions, ...fileEntries], trimmed);
+    return filterPaletteEntries(actions, query.trim());
   });
 
-  function parseFileLineQuery(raw: string): { filePart: string; line: number | null } {
-    const trimmed = raw.trim();
-    const colonIdx = trimmed.lastIndexOf(':');
-    if (colonIdx <= 0) {
-      return { filePart: trimmed, line: null };
+  function scrollSelectedIntoView(index: number) {
+    if (!listEl) return;
+    const rows = listEl.querySelectorAll<HTMLElement>('.palette-row');
+    const target = rows[index];
+    if (target) {
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
-    const after = trimmed.slice(colonIdx + 1);
-    if (/^\d+$/.test(after)) {
-      const parsed = Number.parseInt(after, 10);
-      return {
-        filePart: trimmed.slice(0, colonIdx),
-        line: parsed > 0 ? parsed : null
-      };
-    }
-    return { filePart: trimmed, line: null };
   }
 
   $effect(() => {
     if (open) {
       query = '';
       selectedIndex = 0;
-      if (workspaceRoot) {
-        void fsListWorkspaceFiles()
-          .then((list) => {
-            filePaths = list;
-          })
-          .catch(() => {
-            filePaths = [];
-          });
-      } else {
-        filePaths = [];
-      }
+      if (listEl) listEl.scrollTop = 0;
       queueMicrotask(() => {
         inputEl?.focus();
+        if (listEl) listEl.scrollTop = 0;
       });
     }
   });
@@ -97,6 +57,7 @@
       event.preventDefault();
       if (combinedEntries.length > 0) {
         selectedIndex = (selectedIndex + 1) % combinedEntries.length;
+        scrollSelectedIntoView(selectedIndex);
       }
       return;
     }
@@ -105,6 +66,7 @@
       event.preventDefault();
       if (combinedEntries.length > 0) {
         selectedIndex = (selectedIndex - 1 + combinedEntries.length) % combinedEntries.length;
+        scrollSelectedIntoView(selectedIndex);
       }
       return;
     }
@@ -117,8 +79,6 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="palette-backdrop" onclick={onClose}>
     <div
       class="palette-card"
@@ -135,26 +95,29 @@
           bind:value={query}
           type="text"
           class="palette-input"
-          placeholder="Type a command or file name..."
+          placeholder="Type a command..."
           oninput={() => {
             selectedIndex = 0;
+            if (listEl) listEl.scrollTop = 0;
           }}
         />
       </div>
 
-      <ul class="palette-list">
+      <ul bind:this={listEl} class="palette-list">
         {#if combinedEntries.length === 0}
-          <li class="empty-row">No matching commands or files</li>
+          <li class="empty-row">No matching commands</li>
         {:else}
           {#each combinedEntries as item, i (item.id)}
             <li>
               <button
                 class="palette-row"
                 class:selected={i === selectedIndex}
-                onmouseenter={() => (selectedIndex = i)}
+                onmousemove={(e) => {
+                  if (e.movementX !== 0 || e.movementY !== 0) selectedIndex = i;
+                }}
                 onclick={() => executeIndex(i)}
               >
-                <span class="row-label" class:mono={item.category === 'File'}>{item.label}</span>
+                <span class="row-label">{item.label}</span>
                 <span class="row-meta">
                   {#if item.shortcut}
                     <kbd class="shortcut-badge">{item.shortcut}</kbd>
@@ -174,7 +137,9 @@
   .palette-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--backdrop-bg);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    backdrop-filter: var(--backdrop-blur);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -184,9 +149,11 @@
 
   .palette-card {
     width: 100%;
-    max-width: 560px;
-    background: var(--el);
-    border: 1px solid var(--bd);
+    max-width: 520px;
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
     border-radius: var(--radius-dialog);
     box-shadow: var(--shadow-float);
     overflow: hidden;
@@ -195,39 +162,44 @@
   }
 
   .palette-header {
-    padding: 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
   }
 
-  .palette-input {
+  input[type='text'].palette-input {
     width: 100%;
     height: 24px;
     border: none;
+    border-radius: 0;
     background: transparent;
+    box-shadow: none;
     color: var(--tx);
     padding: 0;
     font-size: 13px;
   }
 
-  .palette-input:focus {
+  input[type='text'].palette-input:focus,
+  input[type='text'].palette-input:focus-visible {
     outline: none;
+    border: none;
+    box-shadow: none;
   }
 
   .palette-list {
     list-style: none;
     max-height: 360px;
     overflow-y: auto;
-    padding: 6px 0;
+    padding: 6px;
   }
 
   .palette-row {
     width: 100%;
-    height: 36px;
-    padding: 0 16px;
+    height: 34px;
+    padding: 0 12px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--tx);
     display: flex;
@@ -248,11 +220,6 @@
     font-size: 13px;
   }
 
-  .row-label.mono {
-    font-family: var(--font-mono);
-    font-size: 12px;
-  }
-
   .row-meta {
     display: flex;
     align-items: center;
@@ -264,10 +231,10 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--dm);
-    background: var(--pn);
+    background: var(--el);
     border: 1px solid var(--bd);
-    border-radius: 4px;
-    padding: 1px 6px;
+    border-radius: 6px;
+    padding: 2px 6px;
   }
 
   .category-tag {

@@ -254,7 +254,6 @@
     <div class="branch-bar">
       <div class="branch-selector">
         {#if branchesData && branchesData.branches.length > 0 && !statusData.detached}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="branch-dropdown"
             bind:this={dropdownContainerEl}
@@ -322,10 +321,6 @@
           </div>
         {/if}
       </div>
-
-      {#if statusData.ahead > 0 || statusData.behind > 0}
-        <span class="ab-badge mono">+{statusData.ahead} -{statusData.behind}</span>
-      {/if}
     </div>
 
     {#if statusData.merging || statusData.rebasing || statusData.detached || statusData.hasConflicts}
@@ -466,14 +461,15 @@
   .git-panel {
     width: 100%;
     height: 100%;
-    background: var(--pn);
+    background: transparent;
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
 
   .panel-header {
-    height: 36px;
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -482,7 +478,7 @@
   }
 
   .panel-title {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
   }
@@ -494,16 +490,28 @@
   }
 
   .icon-btn {
-    width: 24px;
-    height: 24px;
-    padding: 0;
+    width: auto;
+    min-width: calc(24px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
+    padding: 2px;
     border: none;
     background: transparent;
     color: var(--dm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-btn :global(svg) {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
   }
 
   .branch-bar {
-    height: 34px;
+    height: auto;
+    min-height: calc(34px * var(--ui-scale, 1));
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -529,13 +537,14 @@
 
   .branch-trigger {
     width: 100%;
-    height: 24px;
-    padding: 0 8px;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    padding: 3px 8px;
     background: var(--el);
     border: 1px solid var(--bd);
     border-radius: var(--radius-ctrl);
     color: var(--tx);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -574,7 +583,7 @@
     white-space: nowrap;
     min-width: 0;
     color: var(--tx);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .branch-trigger-chevron {
@@ -592,9 +601,11 @@
     max-width: 280px;
     max-height: 220px;
     overflow-y: auto;
-    background: var(--pn);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-panel);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-menu);
     box-shadow: var(--shadow-float);
     z-index: 50;
     padding: 4px;
@@ -605,14 +616,15 @@
 
   .branch-item {
     width: 100%;
-    height: 26px;
-    min-height: 26px;
-    padding: 4px 8px;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    padding: 3px 8px;
     border: none;
     border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--tx);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
+    line-height: normal;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -654,23 +666,26 @@
   .branch-detached-label {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     color: var(--dm);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     min-width: 0;
   }
 
+  .branch-trigger-icon :global(svg),
+  .branch-trigger-chevron :global(svg),
+  .branch-item-check :global(svg),
+  .branch-detached-label :global(svg) {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+  }
+
   .branch-label {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .ab-badge {
-    font-size: 11px;
-    color: var(--dm);
     white-space: nowrap;
   }
 
@@ -679,7 +694,7 @@
     background: var(--el);
     border-bottom: 1px solid var(--bd);
     color: var(--mo);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .error-banner {
@@ -687,7 +702,7 @@
     background: var(--des);
     border-bottom: 1px solid var(--bd);
     color: var(--de);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .changes-scroll {
@@ -707,21 +722,20 @@
 
   .group-title {
     padding: 2px 6px;
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
   }
 
   .group-empty {
     padding: 4px 6px;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--ft);
   }
 
   .file-row {
-    height: 28px;
-    min-height: 28px;
-    line-height: 28px;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
     flex-shrink: 0;
     box-sizing: border-box;
     padding: 0 4px;
@@ -729,7 +743,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 4px;
+    gap: calc(4px * var(--ui-scale, 1));
   }
 
   .file-row:hover {
@@ -739,27 +753,30 @@
   .file-main {
     flex: 1;
     min-width: 0;
-    height: 26px;
-    padding: 0 4px;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    padding: 2px 4px;
     border: none;
     background: transparent;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: calc(8px * var(--ui-scale, 1));
     text-align: left;
+    line-height: normal;
   }
 
   .badge {
-    width: 14px;
-    font-size: 12px;
+    min-width: calc(14px * var(--ui-scale, 1));
+    width: auto;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 600;
     text-align: center;
     flex-shrink: 0;
   }
 
   .file-path {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -769,7 +786,7 @@
   .row-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: calc(2px * var(--ui-scale, 1));
     opacity: 0;
   }
 
@@ -778,12 +795,23 @@
   }
 
   .row-btn {
-    width: 22px;
-    height: 22px;
-    padding: 0;
+    width: auto;
+    min-width: calc(22px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(22px * var(--ui-scale, 1));
+    padding: 2px;
     border: none;
     background: transparent;
     color: var(--dm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .row-btn :global(svg) {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
   }
 
   .row-btn:hover {
@@ -792,15 +820,17 @@
 
   .discard-confirm-box {
     padding: 8px 12px;
-    background: var(--el);
-    border-top: 1px solid var(--bd);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border-top: 1px solid var(--pbd);
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
   .discard-text {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
     word-break: break-all;
   }
@@ -812,9 +842,10 @@
   }
 
   .small-btn {
-    height: 22px;
-    padding: 0 8px;
-    font-size: 12px;
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
+    padding: 2px 8px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .commit-box {
@@ -827,18 +858,21 @@
 
   .commit-input {
     width: 100%;
-    height: 32px;
-    padding: 0 10px;
-    background: var(--bg);
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
+    padding: 4px 10px;
+    background: var(--el);
     color: var(--tx);
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
-    font-size: 12px;
+    border-radius: var(--radius-input);
+    font-size: var(--font-size-ui, 13px);
   }
 
   .commit-btn {
     width: 100%;
-    height: 28px;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    font-size: var(--font-size-ui, 13px);
   }
 
   .empty-state {
@@ -852,7 +886,7 @@
 
   .muted {
     color: var(--dm);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .mono {

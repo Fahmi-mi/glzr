@@ -9,6 +9,7 @@
   import Rows2 from '@lucide/svelte/icons/rows-2';
   import Terminal from '@lucide/svelte/icons/terminal';
   import X from '@lucide/svelte/icons/x';
+  import FileIcon from '$lib/components/icons/FileIcon.svelte';
   import type { LayoutNode, Pane, Tab } from '$lib/layout/types';
   import DiffTab from '$lib/components/tabs/DiffTab.svelte';
   import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
@@ -137,7 +138,7 @@
         onMoveTab(parsed.paneId, parsed.tabId, targetPane.id, targetIndex);
       }
     } catch {
-      // Ignore invalid drag payload
+      return;
     }
   }
 </script>
@@ -176,7 +177,6 @@
       />
     </div>
 
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="split-divider {node.direction}"
       class:active={draggingSplitter}
@@ -214,7 +214,6 @@
     </div>
   </div>
 {:else}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <section
     class="pane"
     class:focused={node.id === focusedPaneId}
@@ -230,7 +229,6 @@
     <div class="tab-strip">
       <div class="tabs-scroll">
         {#each node.tabs as tab, idx (tab.id)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="tab-wrapper"
             class:active={tab.id === activePaneTab?.id}
@@ -251,7 +249,10 @@
               }}
             >
               {#if tab.kind === 'file'}
-                <FileText size={14} strokeWidth={2} />
+                <FileIcon
+                  filename={typeof tab.data?.path === 'string' ? tab.data.path : tab.title}
+                  size={14}
+                />
               {:else if tab.kind === 'diff'}
                 <GitCompare size={14} strokeWidth={2} />
               {:else if tab.kind === 'preview'}
@@ -474,38 +475,48 @@
 
   .split-divider {
     flex-shrink: 0;
-    background: var(--bd);
-    transition: background-color 120ms ease;
+    background: transparent;
     z-index: 10;
   }
 
   .split-divider.row {
-    width: 4px;
+    width: var(--gap);
     cursor: col-resize;
   }
 
   .split-divider.column {
-    height: 4px;
+    height: var(--gap);
     cursor: row-resize;
   }
 
-  .split-divider:hover,
-  .split-divider.active {
-    background: var(--ac);
-  }
-
   .pane {
+    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 200px;
     min-height: 200px;
-    background: var(--bg);
-    border-top: 2px solid transparent;
+    background: var(--pbg);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--psh);
+    overflow: hidden;
+    contain: layout paint style;
   }
 
   .pane.focused {
-    border-top-color: var(--ac);
+    box-shadow: var(--fcsh);
+    border-color: var(--pbd);
+  }
+
+  .pane.focused::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: calc(var(--radius-panel) - 1px);
+    box-shadow: var(--fc-ring);
+    pointer-events: none;
+    z-index: 20;
   }
 
   .pane.drag-over {
@@ -514,20 +525,21 @@
   }
 
   .tab-strip {
-    height: 36px;
-    padding: 0 8px 0 12px;
-    background: var(--pn);
+    height: 42px;
+    padding: 0 10px;
+    background: transparent;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .tabs-scroll {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
     flex: 1;
   }
@@ -539,10 +551,15 @@
   }
 
   .tab-wrapper {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     border-radius: var(--radius-ctrl);
     padding-right: 4px;
+  }
+
+  .tab-wrapper:hover {
+    background: var(--el);
   }
 
   .tab-wrapper.active {
@@ -556,6 +573,18 @@
     background: transparent;
     color: var(--dm);
     gap: 8px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .tab-item :global(.jb-file-icon) {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
+  }
+
+  .tab-item:hover {
+    background: transparent;
   }
 
   .tab-item.active {
@@ -606,9 +635,12 @@
     top: 30px;
     left: 0;
     min-width: 165px;
-    background: var(--pn);
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-dialog);
+    background: var(--pop-bg);
+    -webkit-backdrop-filter: var(--pop-blur);
+    backdrop-filter: var(--pop-blur);
+    border: 1px solid var(--pbd);
+    border-radius: var(--radius-menu);
+    box-shadow: var(--shadow-float);
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -621,6 +653,7 @@
     height: 28px;
     padding: 0 10px;
     border: none;
+    border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--tx);
     justify-content: flex-start;
