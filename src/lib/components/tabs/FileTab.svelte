@@ -30,6 +30,21 @@
   import { detectLanguage, loadLanguageExtension } from '$lib/languages';
   import ImageTab from './ImageTab.svelte';
 
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'undefined') {
+    window.requestIdleCallback = (callback): number => {
+      const start = performance.now();
+      return window.setTimeout(() => {
+        callback({
+          didTimeout: false,
+          timeRemaining: () => Math.max(0, 5 - (performance.now() - start))
+        });
+      }, 16);
+    };
+    window.cancelIdleCallback = (id: number): void => {
+      window.clearTimeout(id);
+    };
+  }
+
   export interface FileTabMeta {
     language: string;
     encoding: string;
@@ -101,13 +116,14 @@
   const glzrEditorTheme = EditorView.theme({
     '&': {
       height: '100%',
-      backgroundColor: 'transparent',
+      backgroundColor: 'var(--pbg)',
       color: 'var(--tx)',
       fontFamily: 'var(--font-mono)',
       fontSize: 'var(--font-size-code)',
       lineHeight: '24px'
     },
     '.cm-scroller': {
+      backgroundColor: 'var(--pbg)',
       fontFamily: 'var(--font-mono)',
       lineHeight: '24px',
       overflow: 'auto',
@@ -119,9 +135,7 @@
       transform: 'translateZ(0)'
     },
     '.cm-line': {
-      lineHeight: '24px'
-    },
-    '.cm-lineNumbers': {
+      lineHeight: '24px',
       contain: 'layout style'
     },
     '.cm-lineNumbers .cm-gutterElement': {
@@ -141,12 +155,11 @@
       backgroundColor: 'var(--acs)'
     },
     '.cm-gutters': {
-      backgroundColor: 'transparent',
+      backgroundColor: 'var(--pbg)',
       color: 'var(--ft)',
       border: 'none',
       paddingLeft: '16px',
-      paddingRight: '12px',
-      contain: 'layout style'
+      paddingRight: '12px'
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'transparent',

@@ -4,6 +4,24 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>glzr</title>
+    <script>
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'undefined') {
+        window.requestIdleCallback = function (cb) {
+          return window.setTimeout(function () {
+            var start = performance.now();
+            cb({
+              didTimeout: false,
+              timeRemaining: function () {
+                return Math.max(0, 5 - (performance.now() - start));
+              }
+            });
+          }, 16);
+        };
+        window.cancelIdleCallback = function (id) {
+          window.clearTimeout(id);
+        };
+      }
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

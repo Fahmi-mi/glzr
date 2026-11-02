@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import FileText from '@lucide/svelte/icons/file-text';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
   import {
@@ -17,12 +16,21 @@
 
   let { onSelectMatch }: Props = $props();
 
+  interface PreparedMatch {
+    relPath: string;
+    line: number;
+    col: number;
+    pre: string;
+    hit: string;
+    post: string;
+  }
+
   type FlatSearchRow =
     | { type: 'header'; key: string; relPath: string; count: number }
-    | { type: 'match'; key: string; match: SearchMatchDto };
+    | { type: 'match'; key: string; match: PreparedMatch };
 
   const ROW_HEIGHT = 26;
-  const OVERSCAN = 10;
+  const OVERSCAN = 12;
 
   let pattern = $state('');
   let globFilter = $state('');
@@ -33,7 +41,7 @@
   let searching = $state(false);
   let truncated = $state(false);
   let errorMsg = $state<string | null>(null);
-  let results = $state<SearchMatchDto[]>([]);
+  let results = $state.raw<PreparedMatch[]>([]);
 
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let scrollTop = $state(0);
@@ -45,9 +53,23 @@
   let unlistenDone: (() => void) | null = null;
   let unlistenError: (() => void) | null = null;
 
+  function splitSnippet(match: SearchMatchDto): PreparedMatch {
+    const chars = Array.from(match.snippet);
+    const start = Math.max(0, Math.min(chars.length, match.matchStart));
+    const end = Math.max(start, Math.min(chars.length, match.matchEnd));
+    return {
+      relPath: match.relPath,
+      line: match.line,
+      col: match.col,
+      pre: chars.slice(0, start).join(''),
+      hit: chars.slice(start, end).join(''),
+      post: chars.slice(end).join('')
+    };
+  }
+
   const flatRows = $derived.by<FlatSearchRow[]>(() => {
     if (results.length === 0) return [];
-    const grouped = new Map<string, SearchMatchDto[]>();
+    const grouped = new Map<string, PreparedMatch[]>();
     for (const item of results) {
       const list = grouped.get(item.relPath);
       if (list) {
@@ -58,7 +80,6 @@
     }
 
     const out: FlatSearchRow[] = [];
-    let idx = 0;
     for (const [relPath, matches] of grouped.entries()) {
       out.push({
         type: 'header',
@@ -66,11 +87,12 @@
         relPath,
         count: matches.length
       });
+      let fileMatchIdx = 0;
       for (const m of matches) {
-        idx += 1;
+        fileMatchIdx += 1;
         out.push({
           type: 'match',
-          key: `m-${idx}-${m.relPath}-${m.line}-${m.col}`,
+          key: `m-${m.relPath}-${fileMatchIdx}-${m.line}-${m.col}`,
           match: m
         });
       }
@@ -79,9 +101,12 @@
   });
 
   const totalHeight = $derived(flatRows.length * ROW_HEIGHT);
-  const startIndex = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
+  const startIndex = $derived(Math.max(0, (Math.floor(scrollTop / ROW_HEIGHT) & ~3) - OVERSCAN));
   const endIndex = $derived(
-    Math.min(flatRows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
+    Math.min(
+      flatRows.length,
+      ((Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + 3) & ~3) + OVERSCAN
+    )
   );
   const visibleSlice = $derived(flatRows.slice(startIndex, endIndex));
 
@@ -145,7 +170,8 @@
   onMount(async () => {
     unlistenResults = await onBackendEvent('search:results', (payload) => {
       if (payload.queryId === activeQueryId) {
-        results.push(...payload.items);
+        const prepared = payload.items.map(splitSnippet);
+        results = [...results, ...prepared];
       }
     });
 
@@ -171,17 +197,6 @@
     unlistenError?.();
     void searchCancel().catch(() => {});
   });
-
-  function splitSnippet(match: SearchMatchDto): { pre: string; hit: string; post: string } {
-    const chars = Array.from(match.snippet);
-    const start = Math.max(0, Math.min(chars.length, match.matchStart));
-    const end = Math.max(start, Math.min(chars.length, match.matchEnd));
-    return {
-      pre: chars.slice(0, start).join(''),
-      hit: chars.slice(start, end).join(''),
-      post: chars.slice(end).join('')
-    };
-  }
 </script>
 
 <aside class="search-panel">
@@ -280,30 +295,49 @@
       <div class="empty-box">No matching results found</div>
     {:else}
       <div class="virtual-spacer" style:height="{totalHeight}px">
-        {#each visibleSlice as row, idx (row.key)}
-          {@const topPx = (startIndex + idx) * ROW_HEIGHT}
-          {#if row.type === 'header'}
-            <div class="virtual-row file-header" style:top="{topPx}px">
-              <FileText size={13} strokeWidth={2} />
-              <span class="header-path mono">{row.relPath}</span>
-              <span class="header-count mono">{row.count}</span>
-            </div>
-          {:else}
-            {@const parts = splitSnippet(row.match)}
-            <button
-              class="virtual-row match-row"
-              style:top="{topPx}px"
-              onclick={() => onSelectMatch(row.match.relPath, row.match.line)}
-            >
-              <span class="line-num mono">{row.match.line}:</span>
-              <span class="snippet-text mono">
-                <span>{parts.pre}</span><mark class="hit-mark">{parts.hit}</mark><span
-                  >{parts.post}</span
+        <div
+          class="virtual-window"
+          style:transform="translate3d(0, {startIndex * ROW_HEIGHT}px, 0)"
+        >
+          {#each visibleSlice as row (row.key)}
+            {#if row.type === 'header'}
+              <div class="virtual-row file-header">
+                <svg
+                  class="file-icon"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
                 >
-              </span>
-            </button>
-          {/if}
-        {/each}
+                  <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+                  <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+                  <path d="M10 9H8" />
+                  <path d="M16 13H8" />
+                  <path d="M16 17H8" />
+                </svg>
+                <span class="header-path mono">{row.relPath}</span>
+                <span class="header-count mono">{row.count}</span>
+              </div>
+            {:else}
+              <button
+                class="virtual-row match-row"
+                onclick={() => onSelectMatch(row.match.relPath, row.match.line)}
+              >
+                <span class="line-num mono">{row.match.line}:</span>
+                <span class="snippet-text mono">
+                  <span>{row.match.pre}</span><mark class="hit-mark">{row.match.hit}</mark><span
+                    >{row.match.post}</span
+                  >
+                </span>
+              </button>
+            {/if}
+          {/each}
+        </div>
       </div>
     {/if}
   </div>
@@ -313,7 +347,7 @@
   .search-panel {
     width: 100%;
     height: 100%;
-    background: transparent;
+    background: var(--pbg);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -445,26 +479,43 @@
     overflow-y: auto;
     position: relative;
     min-height: 0;
+    background: var(--pbg);
+    overscroll-behavior: contain;
+    contain: strict;
+    will-change: scroll-position;
+    transform: translateZ(0);
   }
 
   .virtual-spacer {
     position: relative;
     width: 100%;
+    contain: layout style paint;
+  }
+
+  .virtual-window {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    will-change: transform;
   }
 
   .virtual-row {
-    position: absolute;
-    left: 0;
-    right: 0;
+    width: 100%;
     height: 26px;
     padding: 0 10px;
     display: flex;
     align-items: center;
     gap: 6px;
+    contain: layout style paint;
+  }
+
+  .file-icon {
+    flex-shrink: 0;
   }
 
   .file-header {
-    background: var(--el);
+    background: var(--pbg);
     color: var(--tx);
     font-weight: 500;
     border-top: 1px solid var(--bd);
@@ -489,7 +540,7 @@
     width: 100%;
     border: none;
     border-radius: 0;
-    background: transparent;
+    background: var(--pbg);
     color: var(--dm);
     justify-content: flex-start;
     text-align: left;

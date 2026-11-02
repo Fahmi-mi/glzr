@@ -74,4 +74,26 @@ describe('release hardening and stress tests', () => {
     const largeText = 'a'.repeat(65 * 1024);
     expect(isLargePaste(largeText, 64)).toBe(true);
   });
+
+  it('provides positive timeRemaining budget when idle callback polyfill fires after 16ms delay', async () => {
+    const { installIdleCallbackPolyfill } = await import('./idle');
+    const mockTarget: {
+      requestIdleCallback?: typeof window.requestIdleCallback;
+      cancelIdleCallback?: typeof window.cancelIdleCallback;
+    } = {};
+
+    installIdleCallbackPolyfill(mockTarget as typeof globalThis);
+    expect(typeof mockTarget.requestIdleCallback).toBe('function');
+    expect(typeof mockTarget.cancelIdleCallback).toBe('function');
+
+    const remainingAtStart = await new Promise<number>((resolve) => {
+      mockTarget.requestIdleCallback!((deadline) => {
+        expect(deadline.didTimeout).toBe(false);
+        resolve(deadline.timeRemaining());
+      });
+    });
+
+    expect(remainingAtStart).toBeGreaterThan(0);
+    expect(remainingAtStart).toBeLessThanOrEqual(5);
+  });
 });

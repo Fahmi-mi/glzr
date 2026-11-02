@@ -1653,15 +1653,14 @@
     height: 100%;
     flex-shrink: 0;
     min-height: 0;
-    background: var(--cbg);
-    -webkit-backdrop-filter: var(--cblur);
-    backdrop-filter: var(--cblur);
+    background: var(--pbg);
     border: 1px solid var(--pbd);
     border-radius: var(--radius-panel);
     box-shadow: var(--psh);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    contain: layout paint style;
   }
 
   .sidebar-tabs-bar {
