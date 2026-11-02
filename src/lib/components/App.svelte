@@ -1340,9 +1340,7 @@
 
     <CommandPalette
       open={commandPaletteVisible}
-      workspaceRoot={projectState.activeFolder}
       actions={paletteActions}
-      onSelectFile={(fullPath, line) => openFileInPane(fullPath, line)}
       onClose={() => (commandPaletteVisible = false)}
     />
 

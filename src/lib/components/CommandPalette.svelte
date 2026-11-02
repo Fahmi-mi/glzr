@@ -1,63 +1,22 @@
 <script lang="ts">
-  import { fsListWorkspaceFiles } from '$lib/ipc';
   import { filterPaletteEntries, type PaletteEntry } from '$lib/keymap';
 
   interface Props {
     open: boolean;
-    workspaceRoot: string | null;
     actions: PaletteEntry[];
-    onSelectFile: (fullPath: string, line: number | null) => void;
     onClose: () => void;
   }
 
-  let { open, workspaceRoot, actions, onSelectFile, onClose }: Props = $props();
+  let { open, actions, onClose }: Props = $props();
 
   let query = $state('');
-  let filePaths = $state<string[]>([]);
   let selectedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | null>(null);
   let listEl = $state<HTMLUListElement | null>(null);
 
   const combinedEntries = $derived.by<PaletteEntry[]>(() => {
-    const parsedQuery = parseFileLineQuery(query);
-    const trimmed = parsedQuery.filePart.trim();
-
-    if (!workspaceRoot || filePaths.length === 0) {
-      return filterPaletteEntries(actions, trimmed);
-    }
-
-    const fileEntries: PaletteEntry[] = filePaths.map((relPath) => ({
-      id: `file:${relPath}`,
-      label: relPath,
-      category: 'File',
-      run: () => {
-        onSelectFile(`${workspaceRoot}/${relPath}`, parsedQuery.line);
-      }
-    }));
-
-    if (!trimmed) {
-      return [...actions, ...fileEntries.slice(0, 25)].slice(0, 60);
-    }
-
-    return filterPaletteEntries([...actions, ...fileEntries], trimmed);
+    return filterPaletteEntries(actions, query.trim());
   });
-
-  function parseFileLineQuery(raw: string): { filePart: string; line: number | null } {
-    const trimmed = raw.trim();
-    const colonIdx = trimmed.lastIndexOf(':');
-    if (colonIdx <= 0) {
-      return { filePart: trimmed, line: null };
-    }
-    const after = trimmed.slice(colonIdx + 1);
-    if (/^\d+$/.test(after)) {
-      const parsed = Number.parseInt(after, 10);
-      return {
-        filePart: trimmed.slice(0, colonIdx),
-        line: parsed > 0 ? parsed : null
-      };
-    }
-    return { filePart: trimmed, line: null };
-  }
 
   function scrollSelectedIntoView(index: number) {
     if (!listEl) return;
@@ -73,17 +32,6 @@
       query = '';
       selectedIndex = 0;
       if (listEl) listEl.scrollTop = 0;
-      if (workspaceRoot) {
-        void fsListWorkspaceFiles()
-          .then((list) => {
-            filePaths = list;
-          })
-          .catch(() => {
-            filePaths = [];
-          });
-      } else {
-        filePaths = [];
-      }
       queueMicrotask(() => {
         inputEl?.focus();
         if (listEl) listEl.scrollTop = 0;
@@ -147,7 +95,7 @@
           bind:value={query}
           type="text"
           class="palette-input"
-          placeholder="Type a command or file name..."
+          placeholder="Type a command..."
           oninput={() => {
             selectedIndex = 0;
             if (listEl) listEl.scrollTop = 0;
@@ -157,7 +105,7 @@
 
       <ul bind:this={listEl} class="palette-list">
         {#if combinedEntries.length === 0}
-          <li class="empty-row">No matching commands or files</li>
+          <li class="empty-row">No matching commands</li>
         {:else}
           {#each combinedEntries as item, i (item.id)}
             <li>
@@ -169,7 +117,7 @@
                 }}
                 onclick={() => executeIndex(i)}
               >
-                <span class="row-label" class:mono={item.category === 'File'}>{item.label}</span>
+                <span class="row-label">{item.label}</span>
                 <span class="row-meta">
                   {#if item.shortcut}
                     <kbd class="shortcut-badge">{item.shortcut}</kbd>
@@ -269,11 +217,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
-  }
-
-  .row-label.mono {
-    font-family: var(--font-mono);
     font-size: 13px;
   }
 
