@@ -1675,8 +1675,8 @@
   .sidebar-tabs-bar {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 12px 8px 8px;
+    gap: 6px;
+    padding: 10px 10px 8px;
   }
 
   .sidebar-tab-btn {

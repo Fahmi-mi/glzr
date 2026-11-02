@@ -521,21 +521,21 @@
   }
 
   .tab-strip {
-    height: 36px;
-    padding: 0 8px;
+    height: 42px;
+    padding: 0 10px;
     background: transparent;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
   }
 
   .tabs-scroll {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
     flex: 1;
   }

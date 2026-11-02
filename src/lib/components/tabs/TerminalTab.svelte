@@ -450,7 +450,7 @@
     height: 100%;
     min-height: 0;
     background: transparent;
-    padding: 8px 12px;
+    padding: 14px 16px;
   }
 
   .terminal-tab-wrapper.hidden-tab {
