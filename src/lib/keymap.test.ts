@@ -69,6 +69,62 @@ describe('focus-based keymap and command palette', () => {
         kb
       )
     ).toBe('zoom_in');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '=', altKey: false, ctrlKey: true, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('zoom_in');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '+', altKey: false, ctrlKey: true, shiftKey: true, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('zoom_in');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '=', altKey: false, ctrlKey: false, shiftKey: false, metaKey: true },
+        false,
+        kb
+      )
+    ).toBe('zoom_in');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '-', altKey: false, ctrlKey: true, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('zoom_out');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '-', altKey: false, ctrlKey: false, shiftKey: false, metaKey: true },
+        false,
+        kb
+      )
+    ).toBe('zoom_out');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '0', altKey: false, ctrlKey: true, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('zoom_reset');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '0', altKey: false, ctrlKey: false, shiftKey: false, metaKey: true },
+        false,
+        kb
+      )
+    ).toBe('zoom_reset');
   });
 
   it('filters command palette entries by label and keywords', () => {

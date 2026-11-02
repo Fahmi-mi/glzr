@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import FileText from '@lucide/svelte/icons/file-text';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
+  import FileIcon from '$lib/components/icons/FileIcon.svelte';
   import {
     onBackendEvent,
     searchCancel,
@@ -12,17 +12,27 @@
   } from '$lib/ipc';
 
   interface Props {
+    fontSize?: number;
     onSelectMatch: (relPath: string, line: number) => void;
   }
 
-  let { onSelectMatch }: Props = $props();
+  let { fontSize = 14, onSelectMatch }: Props = $props();
+
+  interface PreparedMatch {
+    relPath: string;
+    line: number;
+    col: number;
+    pre: string;
+    hit: string;
+    post: string;
+  }
 
   type FlatSearchRow =
     | { type: 'header'; key: string; relPath: string; count: number }
-    | { type: 'match'; key: string; match: SearchMatchDto };
+    | { type: 'match'; key: string; match: PreparedMatch };
 
-  const ROW_HEIGHT = 26;
-  const OVERSCAN = 10;
+  const rowHeight = $derived(Math.max(18, Math.round(28 * (fontSize / 14))));
+  const OVERSCAN = 12;
 
   let pattern = $state('');
   let globFilter = $state('');
@@ -33,7 +43,7 @@
   let searching = $state(false);
   let truncated = $state(false);
   let errorMsg = $state<string | null>(null);
-  let results = $state<SearchMatchDto[]>([]);
+  let results = $state.raw<PreparedMatch[]>([]);
 
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let scrollTop = $state(0);
@@ -45,9 +55,23 @@
   let unlistenDone: (() => void) | null = null;
   let unlistenError: (() => void) | null = null;
 
+  function splitSnippet(match: SearchMatchDto): PreparedMatch {
+    const chars = Array.from(match.snippet);
+    const start = Math.max(0, Math.min(chars.length, match.matchStart));
+    const end = Math.max(start, Math.min(chars.length, match.matchEnd));
+    return {
+      relPath: match.relPath,
+      line: match.line,
+      col: match.col,
+      pre: chars.slice(0, start).join(''),
+      hit: chars.slice(start, end).join(''),
+      post: chars.slice(end).join('')
+    };
+  }
+
   const flatRows = $derived.by<FlatSearchRow[]>(() => {
     if (results.length === 0) return [];
-    const grouped = new Map<string, SearchMatchDto[]>();
+    const grouped = new Map<string, PreparedMatch[]>();
     for (const item of results) {
       const list = grouped.get(item.relPath);
       if (list) {
@@ -58,7 +82,6 @@
     }
 
     const out: FlatSearchRow[] = [];
-    let idx = 0;
     for (const [relPath, matches] of grouped.entries()) {
       out.push({
         type: 'header',
@@ -66,11 +89,12 @@
         relPath,
         count: matches.length
       });
+      let fileMatchIdx = 0;
       for (const m of matches) {
-        idx += 1;
+        fileMatchIdx += 1;
         out.push({
           type: 'match',
-          key: `m-${idx}-${m.relPath}-${m.line}-${m.col}`,
+          key: `m-${m.relPath}-${fileMatchIdx}-${m.line}-${m.col}`,
           match: m
         });
       }
@@ -78,10 +102,13 @@
     return out;
   });
 
-  const totalHeight = $derived(flatRows.length * ROW_HEIGHT);
-  const startIndex = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
+  const totalHeight = $derived(flatRows.length * rowHeight);
+  const startIndex = $derived(Math.max(0, (Math.floor(scrollTop / rowHeight) & ~3) - OVERSCAN));
   const endIndex = $derived(
-    Math.min(flatRows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
+    Math.min(
+      flatRows.length,
+      ((Math.ceil((scrollTop + viewportHeight) / rowHeight) + 3) & ~3) + OVERSCAN
+    )
   );
   const visibleSlice = $derived(flatRows.slice(startIndex, endIndex));
 
@@ -145,7 +172,8 @@
   onMount(async () => {
     unlistenResults = await onBackendEvent('search:results', (payload) => {
       if (payload.queryId === activeQueryId) {
-        results.push(...payload.items);
+        const prepared = payload.items.map(splitSnippet);
+        results = [...results, ...prepared];
       }
     });
 
@@ -171,17 +199,6 @@
     unlistenError?.();
     void searchCancel().catch(() => {});
   });
-
-  function splitSnippet(match: SearchMatchDto): { pre: string; hit: string; post: string } {
-    const chars = Array.from(match.snippet);
-    const start = Math.max(0, Math.min(chars.length, match.matchStart));
-    const end = Math.max(start, Math.min(chars.length, match.matchEnd));
-    return {
-      pre: chars.slice(0, start).join(''),
-      hit: chars.slice(start, end).join(''),
-      post: chars.slice(end).join('')
-    };
-  }
 </script>
 
 <aside class="search-panel">
@@ -280,30 +297,30 @@
       <div class="empty-box">No matching results found</div>
     {:else}
       <div class="virtual-spacer" style:height="{totalHeight}px">
-        {#each visibleSlice as row, idx (row.key)}
-          {@const topPx = (startIndex + idx) * ROW_HEIGHT}
-          {#if row.type === 'header'}
-            <div class="virtual-row file-header" style:top="{topPx}px">
-              <FileText size={13} strokeWidth={2} />
-              <span class="header-path mono">{row.relPath}</span>
-              <span class="header-count mono">{row.count}</span>
-            </div>
-          {:else}
-            {@const parts = splitSnippet(row.match)}
-            <button
-              class="virtual-row match-row"
-              style:top="{topPx}px"
-              onclick={() => onSelectMatch(row.match.relPath, row.match.line)}
-            >
-              <span class="line-num mono">{row.match.line}:</span>
-              <span class="snippet-text mono">
-                <span>{parts.pre}</span><mark class="hit-mark">{parts.hit}</mark><span
-                  >{parts.post}</span
-                >
-              </span>
-            </button>
-          {/if}
-        {/each}
+        <div class="virtual-window" style:transform="translate3d(0, {startIndex * rowHeight}px, 0)">
+          {#each visibleSlice as row (row.key)}
+            {#if row.type === 'header'}
+              <div class="virtual-row file-header" style:height="{rowHeight}px">
+                <FileIcon filename={row.relPath} size={13} class="file-icon" />
+                <span class="header-path mono">{row.relPath}</span>
+                <span class="header-count mono">{row.count}</span>
+              </div>
+            {:else}
+              <button
+                class="virtual-row match-row"
+                style:height="{rowHeight}px"
+                onclick={() => onSelectMatch(row.match.relPath, row.match.line)}
+              >
+                <span class="line-num mono">{row.match.line}:</span>
+                <span class="snippet-text mono">
+                  <span>{row.match.pre}</span><mark class="hit-mark">{row.match.hit}</mark><span
+                    >{row.match.post}</span
+                  >
+                </span>
+              </button>
+            {/if}
+          {/each}
+        </div>
       </div>
     {/if}
   </div>
@@ -313,14 +330,15 @@
   .search-panel {
     width: 100%;
     height: 100%;
-    background: var(--pn);
+    background: var(--pbg);
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
 
   .panel-header {
-    height: 36px;
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -329,13 +347,13 @@
   }
 
   .panel-title {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
   }
 
   .count-label {
-    font-size: 11px;
+    font-size: var(--font-size-ui-sm, 12px);
     color: var(--dm);
   }
 
@@ -344,74 +362,98 @@
     border-bottom: 1px solid var(--bd);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
   }
 
   .input-row {
-    height: 30px;
-    padding: 0 8px;
-    background: var(--bg);
+    height: auto;
+    min-height: calc(30px * var(--ui-scale, 1));
+    padding: 2px 8px;
+    background: var(--el);
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-input);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     color: var(--dm);
+  }
+
+  :global(.search-icon) {
+    color: var(--dm);
+    flex-shrink: 0;
+    width: 1.1em;
+    height: 1.1em;
   }
 
   .search-input {
     flex: 1;
     min-width: 0;
-    height: 24px;
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
     border: none;
     background: transparent;
     color: var(--tx);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     padding: 0;
   }
 
   .search-input:focus {
     outline: none;
+    box-shadow: none;
   }
 
   .clear-btn {
-    width: 18px;
-    height: 18px;
+    width: auto;
+    min-width: calc(18px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(18px * var(--ui-scale, 1));
     padding: 0;
     border: none;
     background: transparent;
     color: var(--dm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .clear-btn :global(svg) {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
   }
 
   .filter-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
   }
 
   .glob-input {
     flex: 1;
     min-width: 0;
-    height: 26px;
-    padding: 0 8px;
-    background: var(--bg);
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    padding: 2px 8px;
+    background: var(--el);
     border: 1px solid var(--bd);
-    border-radius: var(--radius-ctrl);
+    border-radius: var(--radius-input);
     color: var(--tx);
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .option-toggles {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: calc(4px * var(--ui-scale, 1));
   }
 
   .opt-btn {
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    font-size: 11px;
+    width: auto;
+    min-width: calc(28px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    padding: 2px 6px;
+    font-size: var(--font-size-ui, 13px);
     background: var(--el);
     color: var(--dm);
     border: 1px solid var(--bd);
@@ -428,7 +470,7 @@
     background: var(--des);
     border-bottom: 1px solid var(--bd);
     color: var(--de);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .truncated-banner {
@@ -436,7 +478,7 @@
     background: var(--el);
     border-bottom: 1px solid var(--bd);
     color: var(--mo);
-    font-size: 11px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .results-viewport {
@@ -444,26 +486,47 @@
     overflow-y: auto;
     position: relative;
     min-height: 0;
+    background: var(--pbg);
+    overscroll-behavior: contain;
+    contain: strict;
+    will-change: scroll-position;
+    transform: translateZ(0);
   }
 
   .virtual-spacer {
     position: relative;
     width: 100%;
+    contain: layout style paint;
+  }
+
+  .virtual-window {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    will-change: transform;
   }
 
   .virtual-row {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 26px;
+    width: 100%;
+    height: auto;
+    min-height: 0;
     padding: 0 10px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
+    contain: layout style paint;
+    box-sizing: border-box;
+  }
+
+  .virtual-row :global(.file-icon) {
+    flex-shrink: 0;
+    width: 1.1em;
+    height: 1.1em;
   }
 
   .file-header {
-    background: var(--el);
+    background: var(--pbg);
     color: var(--tx);
     font-weight: 500;
     border-top: 1px solid var(--bd);
@@ -476,11 +539,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .header-count {
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
   }
 
@@ -488,7 +551,7 @@
     width: 100%;
     border: none;
     border-radius: 0;
-    background: transparent;
+    background: var(--pbg);
     color: var(--dm);
     justify-content: flex-start;
     text-align: left;
@@ -502,7 +565,7 @@
 
   .line-num {
     color: var(--ft);
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
     flex-shrink: 0;
   }
 
@@ -512,7 +575,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
   }
 
@@ -525,7 +588,7 @@
 
   .empty-box {
     padding: 20px 12px;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
     text-align: center;
   }
