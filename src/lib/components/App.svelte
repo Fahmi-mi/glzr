@@ -1528,8 +1528,9 @@
   }
 
   .ws-pill {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     border-radius: var(--radius-input);
     overflow: hidden;
   }
@@ -1540,11 +1541,13 @@
 
   .workspace-item {
     height: 26px;
-    padding: 4px 12px;
+    padding: 0 12px;
     border: none;
     border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
+    line-height: 1;
+    text-align: center;
   }
 
   .workspace-item:hover {
@@ -1574,6 +1577,7 @@
   }
 
   .ws-close-btn {
+    display: none;
     width: 18px;
     height: 18px;
     padding: 0;
@@ -1582,20 +1586,21 @@
     border-radius: 6px;
     background: transparent;
     color: var(--dm);
-    opacity: 0;
   }
 
   .ws-pill:hover .ws-close-btn {
-    opacity: 1;
+    display: inline-flex;
   }
 
   .folder-switch {
     height: 26px;
-    padding: 4px 10px;
+    padding: 0 10px;
     border: none;
     border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
+    line-height: 1;
+    text-align: center;
   }
 
   .folder-switch:hover {
@@ -1611,6 +1616,8 @@
     border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
+    line-height: 1;
+    text-align: center;
   }
 
   .icon-btn:hover {
@@ -1639,6 +1646,8 @@
     height: 24px;
     padding: 0 10px;
     font-size: 12px;
+    line-height: 1;
+    text-align: center;
   }
 
   .workbench {
@@ -1672,12 +1681,14 @@
 
   .sidebar-tab-btn {
     height: 26px;
-    padding: 4px 10px;
+    padding: 0 10px;
     border: none;
     border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--dm);
     font-size: 13px;
+    line-height: 1;
+    text-align: center;
   }
 
   .sidebar-tab-btn:hover {

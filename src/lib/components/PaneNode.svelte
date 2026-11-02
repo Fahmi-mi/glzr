@@ -486,6 +486,7 @@
   }
 
   .pane {
+    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -502,6 +503,16 @@
   .pane.focused {
     box-shadow: var(--fcsh);
     border-color: var(--pbd);
+  }
+
+  .pane.focused::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: calc(var(--radius-panel) - 1px);
+    box-shadow: var(--fc-ring);
+    pointer-events: none;
+    z-index: 20;
   }
 
   .pane.drag-over {
@@ -536,8 +547,9 @@
   }
 
   .tab-wrapper {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     border-radius: var(--radius-ctrl);
     padding-right: 4px;
   }
@@ -557,6 +569,8 @@
     background: transparent;
     color: var(--dm);
     gap: 8px;
+    line-height: 1;
+    text-align: center;
   }
 
   .tab-item:hover {

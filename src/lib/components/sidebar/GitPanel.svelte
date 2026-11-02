@@ -608,12 +608,13 @@
     width: 100%;
     height: 26px;
     min-height: 26px;
-    padding: 4px 8px;
+    padding: 0 8px;
     border: none;
     border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--tx);
     font-size: 12px;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;

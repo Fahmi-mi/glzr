@@ -254,6 +254,13 @@
           <button onclick={handleOpenInBrowser}>Open in browser</button>
         </div>
       </div>
+    {:else if serverOnline === null}
+      <div class="preview-skeleton">
+        <div class="sk-line sk-title"></div>
+        <div class="sk-line sk-w90"></div>
+        <div class="sk-line sk-w75"></div>
+        <div class="sk-card"></div>
+      </div>
     {:else}
       <iframe
         title="Preview {hostLabel}"
@@ -282,7 +289,7 @@
   }
 
   .url-bar-shell {
-    padding: 12px 12px 10px;
+    padding: 16px 16px 12px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -296,7 +303,7 @@
     border: 1px solid var(--bd);
     border-radius: var(--radius-input);
     background: var(--el);
-    color: var(--dm);
+    color: var(--tx);
   }
 
   .nav-controls {
@@ -305,39 +312,59 @@
     gap: 2px;
   }
 
-  .icon-btn {
+  button.icon-btn {
     width: 24px;
     height: 24px;
     padding: 0;
     border: none;
+    border-radius: 6px;
     background: transparent;
-    color: var(--dm);
+    color: var(--tx);
+    box-shadow: none;
+    line-height: 1;
+    text-align: center;
   }
 
-  .icon-btn:hover:not(:disabled) {
+  button.icon-btn:hover:not(:disabled) {
     color: var(--tx);
     background: var(--acs);
+    border-color: transparent;
   }
 
-  .icon-btn:disabled {
+  button.icon-btn:focus-visible {
+    outline: none;
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  button.icon-btn:disabled {
     opacity: 0.35;
     cursor: default;
   }
 
-  .url-input {
+  input[type='text'].url-input {
     flex: 1;
+    min-width: 0;
     height: 24px;
-    padding: 0 6px;
+    padding: 0 4px;
     border: none;
+    border-radius: 0;
     background: transparent;
+    box-shadow: none;
     color: var(--tx);
-    font-family: var(--font-mono);
-    font-size: 12px;
+    opacity: 1;
+    font-family: var(--font-ui);
+    font-size: 13px;
   }
 
-  .url-input:focus {
+  input[type='text'].url-input:focus,
+  input[type='text'].url-input:focus-visible {
     outline: none;
+    border: none;
     box-shadow: none;
+    background: transparent;
+    color: var(--tx);
+    opacity: 1;
   }
 
   .url-error {
@@ -351,7 +378,42 @@
     display: flex;
     min-width: 0;
     min-height: 0;
-    padding: 0 12px 12px;
+    padding: 0 16px 16px;
+  }
+
+  .preview-skeleton {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-top: 4px;
+  }
+
+  .sk-line {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--bd);
+    margin-bottom: 12px;
+  }
+
+  .sk-title {
+    width: 40%;
+    height: 14px;
+  }
+
+  .sk-w90 {
+    width: 90%;
+  }
+
+  .sk-w75 {
+    width: 75%;
+  }
+
+  .sk-card {
+    height: 180px;
+    margin-top: 8px;
+    border-radius: var(--radius-menu);
+    background: var(--el);
+    border: 1px solid var(--bd);
   }
 
   .preview-frame {
@@ -361,6 +423,7 @@
     border: 1px solid var(--bd);
     border-radius: var(--radius-menu);
     background: var(--el);
+    overflow: hidden;
   }
 
   .offline-card {
@@ -370,10 +433,9 @@
     align-items: center;
     justify-content: center;
     gap: 16px;
-    border: 1px solid var(--bd);
-    border-radius: var(--radius-menu);
-    background: var(--el);
     padding: 24px;
+    background: transparent;
+    border: none;
   }
 
   .offline-title {
@@ -384,6 +446,6 @@
   .offline-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
   }
 </style>
