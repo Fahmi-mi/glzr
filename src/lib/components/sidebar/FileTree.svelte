@@ -2,15 +2,14 @@
   import { onMount, tick } from 'svelte';
   import Copy from '@lucide/svelte/icons/copy';
   import ExternalLink from '@lucide/svelte/icons/external-link';
-  import File from '@lucide/svelte/icons/file';
   import FilePlus from '@lucide/svelte/icons/file-plus';
   import Folder from '@lucide/svelte/icons/folder';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import FolderPlus from '@lucide/svelte/icons/folder-plus';
-  import Image from '@lucide/svelte/icons/image';
   import Pencil from '@lucide/svelte/icons/pencil';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Trash2 from '@lucide/svelte/icons/trash-2';
+  import FileIcon from '$lib/components/icons/FileIcon.svelte';
   import {
     fsCreateDir,
     fsCreateFile,
@@ -91,13 +90,6 @@
     walk('', 0);
     return out;
   });
-
-  function isImageFilename(name: string): boolean {
-    const dotIdx = name.lastIndexOf('.');
-    if (dotIdx <= 0) return false;
-    const ext = name.slice(dotIdx + 1).toLowerCase();
-    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'svg'].includes(ext);
-  }
 
   async function loadDirEntries(dirKey: string) {
     try {
@@ -426,10 +418,8 @@
                 {:else}
                   <Folder size={14} strokeWidth={2} />
                 {/if}
-              {:else if isImageFilename(row.entry.name)}
-                <Image size={14} strokeWidth={2} />
               {:else}
-                <File size={14} strokeWidth={2} />
+                <FileIcon filename={row.entry.name} size={14} />
               {/if}
               <span class="entry-name">{row.entry.name}</span>
               {#if badge}

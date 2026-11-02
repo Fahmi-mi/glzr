@@ -9,6 +9,7 @@
   import Rows2 from '@lucide/svelte/icons/rows-2';
   import Terminal from '@lucide/svelte/icons/terminal';
   import X from '@lucide/svelte/icons/x';
+  import FileIcon from '$lib/components/icons/FileIcon.svelte';
   import type { LayoutNode, Pane, Tab } from '$lib/layout/types';
   import DiffTab from '$lib/components/tabs/DiffTab.svelte';
   import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
@@ -248,7 +249,10 @@
               }}
             >
               {#if tab.kind === 'file'}
-                <FileText size={14} strokeWidth={2} />
+                <FileIcon
+                  filename={typeof tab.data?.path === 'string' ? tab.data.path : tab.title}
+                  size={14}
+                />
               {:else if tab.kind === 'diff'}
                 <GitCompare size={14} strokeWidth={2} />
               {:else if tab.kind === 'preview'}
@@ -571,6 +575,12 @@
     gap: 8px;
     line-height: 1;
     text-align: center;
+  }
+
+  .tab-item :global(.jb-file-icon) {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
   }
 
   .tab-item:hover {

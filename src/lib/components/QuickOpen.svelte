@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fsListWorkspaceFiles } from '$lib/ipc';
   import { fuzzyFilterFiles, parseQuickOpenInput } from '$lib/languages';
+  import FileIcon from '$lib/components/icons/FileIcon.svelte';
 
   interface Props {
     open: boolean;
@@ -156,7 +157,10 @@
                 }}
                 onclick={() => chooseItem(relPath)}
               >
-                <span class="row-label">{parts.name}</span>
+                <span class="row-main">
+                  <FileIcon filename={parts.name} size={15} />
+                  <span class="row-label">{parts.name}</span>
+                </span>
                 <span class="row-meta">
                   <span class="category-tag">{parts.dir || 'File'}</span>
                 </span>
@@ -248,6 +252,20 @@
 
   .palette-row.selected {
     background: var(--acs);
+  }
+
+  .row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .row-main :global(.jb-file-icon) {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
   }
 
   .row-label {
