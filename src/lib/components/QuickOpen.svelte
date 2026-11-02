@@ -1,6 +1,4 @@
 <script lang="ts">
-  import FileText from '@lucide/svelte/icons/file-text';
-  import Search from '@lucide/svelte/icons/search';
   import { fsListWorkspaceFiles } from '$lib/ipc';
   import { fuzzyFilterFiles, parseQuickOpenInput } from '$lib/languages';
 
@@ -18,9 +16,19 @@
   let selectedIndex = $state(0);
   let loading = $state(false);
   let inputEl = $state<HTMLInputElement | null>(null);
+  let listEl = $state<HTMLUListElement | null>(null);
 
   const parsed = $derived(parseQuickOpenInput(queryInput));
   const filteredFiles = $derived(fuzzyFilterFiles(allFiles, parsed.query, 50));
+
+  function scrollSelectedIntoView(index: number) {
+    if (!listEl) return;
+    const rows = listEl.querySelectorAll<HTMLElement>('.palette-row');
+    const target = rows[index];
+    if (target) {
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
 
   async function refreshFileList() {
     loading = true;
@@ -37,9 +45,11 @@
     if (open) {
       queryInput = '';
       selectedIndex = 0;
+      if (listEl) listEl.scrollTop = 0;
       void refreshFileList();
       queueMicrotask(() => {
         inputEl?.focus();
+        if (listEl) listEl.scrollTop = 0;
       });
     }
   });
@@ -68,6 +78,7 @@
       event.preventDefault();
       if (filteredFiles.length > 0) {
         selectedIndex = (selectedIndex + 1) % filteredFiles.length;
+        scrollSelectedIntoView(selectedIndex);
       }
       return;
     }
@@ -75,6 +86,7 @@
       event.preventDefault();
       if (filteredFiles.length > 0) {
         selectedIndex = (selectedIndex - 1 + filteredFiles.length) % filteredFiles.length;
+        scrollSelectedIntoView(selectedIndex);
       }
       return;
     }
@@ -100,57 +112,65 @@
 </script>
 
 {#if open}
-  <div
-    class="modal-backdrop"
-    onmousedown={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }}
-  >
-    <div class="quick-open-dialog" role="dialog" aria-modal="true" aria-label="Quick open file">
-      <div class="search-header">
-        <Search size={14} strokeWidth={2} />
+  <div class="palette-backdrop" onclick={onClose}>
+    <div
+      class="palette-card"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Quick open file"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={handleKeyDown}
+    >
+      <div class="palette-header">
         <input
           bind:this={inputEl}
           bind:value={queryInput}
-          onkeydown={handleKeyDown}
           type="text"
-          class="search-input"
+          class="palette-input"
           placeholder="Search files by name (append :line to jump to line)..."
+          oninput={() => {
+            selectedIndex = 0;
+            if (listEl) listEl.scrollTop = 0;
+          }}
         />
         {#if parsed.line !== null}
-          <span class="line-badge">Line {parsed.line}</span>
+          <kbd class="shortcut-badge">Line {parsed.line}</kbd>
         {/if}
       </div>
 
-      <div class="results-list">
+      <ul bind:this={listEl} class="palette-list">
         {#if loading}
-          <div class="empty-item">Loading file list...</div>
+          <li class="empty-row">Loading file list...</li>
         {:else if filteredFiles.length === 0}
-          <div class="empty-item">No matching files found</div>
+          <li class="empty-row">No matching files found</li>
         {:else}
           {#each filteredFiles as relPath, idx (relPath)}
             {@const parts = splitFileParts(relPath)}
-            <button
-              class="result-row"
-              class:selected={idx === selectedIndex}
-              onmouseenter={() => (selectedIndex = idx)}
-              onclick={() => chooseItem(relPath)}
-            >
-              <FileText size={14} strokeWidth={2} />
-              <span class="file-name">{parts.name}</span>
-              {#if parts.dir}
-                <span class="file-dir">{parts.dir}</span>
-              {/if}
-            </button>
+            <li>
+              <button
+                class="palette-row"
+                class:selected={idx === selectedIndex}
+                onmousemove={(e) => {
+                  if (e.movementX !== 0 || e.movementY !== 0) selectedIndex = idx;
+                }}
+                onclick={() => chooseItem(relPath)}
+              >
+                <span class="row-label">{parts.name}</span>
+                <span class="row-meta">
+                  <span class="category-tag">{parts.dir || 'File'}</span>
+                </span>
+              </button>
+            </li>
           {/each}
         {/if}
-      </div>
+      </ul>
     </div>
   </div>
 {/if}
 
 <style>
-  .modal-backdrop {
+  .palette-backdrop {
     position: fixed;
     inset: 0;
     background: var(--backdrop-bg);
@@ -160,10 +180,10 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 84px;
-    z-index: 100;
+    z-index: 110;
   }
 
-  .quick-open-dialog {
+  .palette-card {
     width: 100%;
     max-width: 520px;
     background: var(--pop-bg);
@@ -177,85 +197,91 @@
     flex-direction: column;
   }
 
-  .search-header {
+  .palette-header {
     padding: 14px 16px;
     border-bottom: 1px solid var(--bd);
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: var(--dm);
+    gap: 10px;
   }
 
-  .search-input {
-    flex: 1;
+  input[type='text'].palette-input {
+    width: 100%;
     height: 24px;
     border: none;
+    border-radius: 0;
     background: transparent;
+    box-shadow: none;
     color: var(--tx);
-    font-size: 13px;
     padding: 0;
+    font-size: 13px;
   }
 
-  .search-input:focus {
+  input[type='text'].palette-input:focus,
+  input[type='text'].palette-input:focus-visible {
     outline: none;
+    border: none;
     box-shadow: none;
   }
 
-  .line-badge {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: var(--radius-ctrl);
-    background: var(--acs);
-    color: var(--ac);
-  }
-
-  .results-list {
-    max-height: 320px;
+  .palette-list {
+    list-style: none;
+    max-height: 360px;
     overflow-y: auto;
     padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
   }
 
-  .result-row {
+  .palette-row {
     width: 100%;
     height: 34px;
     padding: 0 12px;
     border: none;
     border-radius: var(--radius-ctrl);
     background: transparent;
-    color: var(--dm);
+    color: var(--tx);
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 12px;
     text-align: left;
   }
 
-  .result-row.selected {
+  .palette-row.selected {
     background: var(--acs);
-    color: var(--tx);
   }
 
-  .file-name {
-    color: var(--tx);
-    font-size: 13px;
-    white-space: nowrap;
-  }
-
-  .file-dir {
-    color: var(--dm);
-    font-family: var(--font-mono);
-    font-size: 11px;
+  .row-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 13px;
   }
 
-  .empty-item {
-    padding: 16px 12px;
+  .row-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .shortcut-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--dm);
+    background: var(--el);
+    border: 1px solid var(--bd);
+    border-radius: 6px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+
+  .category-tag {
+    color: var(--dm);
+    font-size: 12px;
+  }
+
+  .empty-row {
+    padding: 16px;
     color: var(--dm);
     font-size: 12px;
     text-align: center;

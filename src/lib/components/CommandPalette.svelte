@@ -220,18 +220,22 @@
     align-items: center;
   }
 
-  .palette-input {
+  input[type='text'].palette-input {
     width: 100%;
     height: 24px;
     border: none;
+    border-radius: 0;
     background: transparent;
+    box-shadow: none;
     color: var(--tx);
     padding: 0;
     font-size: 13px;
   }
 
-  .palette-input:focus {
+  input[type='text'].palette-input:focus,
+  input[type='text'].palette-input:focus-visible {
     outline: none;
+    border: none;
     box-shadow: none;
   }
 
@@ -270,7 +274,7 @@
 
   .row-label.mono {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .row-meta {
