@@ -321,10 +321,6 @@
           </div>
         {/if}
       </div>
-
-      {#if statusData.ahead > 0 || statusData.behind > 0}
-        <span class="ab-badge mono">+{statusData.ahead} -{statusData.behind}</span>
-      {/if}
     </div>
 
     {#if statusData.merging || statusData.rebasing || statusData.detached || statusData.hasConflicts}
@@ -690,12 +686,6 @@
     color: var(--tx);
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .ab-badge {
-    font-size: var(--font-size-ui-sm, 12px);
-    color: var(--dm);
     white-space: nowrap;
   }
 
