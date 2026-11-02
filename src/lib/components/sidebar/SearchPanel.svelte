@@ -11,10 +11,11 @@
   } from '$lib/ipc';
 
   interface Props {
+    fontSize?: number;
     onSelectMatch: (relPath: string, line: number) => void;
   }
 
-  let { onSelectMatch }: Props = $props();
+  let { fontSize = 14, onSelectMatch }: Props = $props();
 
   interface PreparedMatch {
     relPath: string;
@@ -29,7 +30,7 @@
     | { type: 'header'; key: string; relPath: string; count: number }
     | { type: 'match'; key: string; match: PreparedMatch };
 
-  const ROW_HEIGHT = 26;
+  const rowHeight = $derived(Math.max(18, Math.round(28 * (fontSize / 14))));
   const OVERSCAN = 12;
 
   let pattern = $state('');
@@ -100,12 +101,12 @@
     return out;
   });
 
-  const totalHeight = $derived(flatRows.length * ROW_HEIGHT);
-  const startIndex = $derived(Math.max(0, (Math.floor(scrollTop / ROW_HEIGHT) & ~3) - OVERSCAN));
+  const totalHeight = $derived(flatRows.length * rowHeight);
+  const startIndex = $derived(Math.max(0, (Math.floor(scrollTop / rowHeight) & ~3) - OVERSCAN));
   const endIndex = $derived(
     Math.min(
       flatRows.length,
-      ((Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + 3) & ~3) + OVERSCAN
+      ((Math.ceil((scrollTop + viewportHeight) / rowHeight) + 3) & ~3) + OVERSCAN
     )
   );
   const visibleSlice = $derived(flatRows.slice(startIndex, endIndex));
@@ -295,13 +296,10 @@
       <div class="empty-box">No matching results found</div>
     {:else}
       <div class="virtual-spacer" style:height="{totalHeight}px">
-        <div
-          class="virtual-window"
-          style:transform="translate3d(0, {startIndex * ROW_HEIGHT}px, 0)"
-        >
+        <div class="virtual-window" style:transform="translate3d(0, {startIndex * rowHeight}px, 0)">
           {#each visibleSlice as row (row.key)}
             {#if row.type === 'header'}
-              <div class="virtual-row file-header">
+              <div class="virtual-row file-header" style:height="{rowHeight}px">
                 <svg
                   class="file-icon"
                   width="13"
@@ -326,6 +324,7 @@
             {:else}
               <button
                 class="virtual-row match-row"
+                style:height="{rowHeight}px"
                 onclick={() => onSelectMatch(row.match.relPath, row.match.line)}
               >
                 <span class="line-num mono">{row.match.line}:</span>
@@ -354,7 +353,8 @@
   }
 
   .panel-header {
-    height: 32px;
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -363,13 +363,13 @@
   }
 
   .panel-title {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
   }
 
   .count-label {
-    font-size: 11px;
+    font-size: var(--font-size-ui-sm, 12px);
     color: var(--dm);
   }
 
@@ -378,29 +378,38 @@
     border-bottom: 1px solid var(--bd);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
   }
 
   .input-row {
-    height: 30px;
-    padding: 0 8px;
+    height: auto;
+    min-height: calc(30px * var(--ui-scale, 1));
+    padding: 2px 8px;
     background: var(--el);
     border: 1px solid var(--bd);
     border-radius: var(--radius-input);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     color: var(--dm);
+  }
+
+  :global(.search-icon) {
+    color: var(--dm);
+    flex-shrink: 0;
+    width: 1.1em;
+    height: 1.1em;
   }
 
   .search-input {
     flex: 1;
     min-width: 0;
-    height: 24px;
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
     border: none;
     background: transparent;
     color: var(--tx);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     padding: 0;
   }
 
@@ -410,43 +419,57 @@
   }
 
   .clear-btn {
-    width: 18px;
-    height: 18px;
+    width: auto;
+    min-width: calc(18px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(18px * var(--ui-scale, 1));
     padding: 0;
     border: none;
     background: transparent;
     color: var(--dm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .clear-btn :global(svg) {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
   }
 
   .filter-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
   }
 
   .glob-input {
     flex: 1;
     min-width: 0;
-    height: 26px;
-    padding: 0 8px;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    padding: 2px 8px;
     background: var(--el);
     border: 1px solid var(--bd);
     border-radius: var(--radius-input);
     color: var(--tx);
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .option-toggles {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: calc(4px * var(--ui-scale, 1));
   }
 
   .opt-btn {
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    font-size: 11px;
+    width: auto;
+    min-width: calc(28px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    padding: 2px 6px;
+    font-size: var(--font-size-ui, 13px);
     background: var(--el);
     color: var(--dm);
     border: 1px solid var(--bd);
@@ -463,7 +486,7 @@
     background: var(--des);
     border-bottom: 1px solid var(--bd);
     color: var(--de);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .truncated-banner {
@@ -471,7 +494,7 @@
     background: var(--el);
     border-bottom: 1px solid var(--bd);
     color: var(--mo);
-    font-size: 11px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .results-viewport {
@@ -502,16 +525,20 @@
 
   .virtual-row {
     width: 100%;
-    height: 26px;
+    height: auto;
+    min-height: 0;
     padding: 0 10px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     contain: layout style paint;
+    box-sizing: border-box;
   }
 
   .file-icon {
     flex-shrink: 0;
+    width: 1.1em;
+    height: 1.1em;
   }
 
   .file-header {
@@ -528,11 +555,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .header-count {
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
   }
 
@@ -554,7 +581,7 @@
 
   .line-num {
     color: var(--ft);
-    font-size: 11px;
+    font-size: var(--font-size-ui, 13px);
     flex-shrink: 0;
   }
 
@@ -564,7 +591,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
   }
 
@@ -577,7 +604,7 @@
 
   .empty-box {
     padding: 20px 12px;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
     text-align: center;
   }

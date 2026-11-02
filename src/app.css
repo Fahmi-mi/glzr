@@ -55,6 +55,11 @@
     ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
   --font-mono: var(--font-mono-system);
   --font-size-code: 14px;
+  --ui-scale: 1;
+  --font-size-ui: 13px;
+  --font-size-ui-sm: 12px;
+  --font-size-ui-xs: 11px;
+  --font-size-ui-lg: 15px;
 
   --gap: 12px;
   --radius-ctrl: 8px;

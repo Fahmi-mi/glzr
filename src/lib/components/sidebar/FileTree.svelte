@@ -508,7 +508,8 @@
   }
 
   .panel-header {
-    height: 32px;
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
     padding: 0 12px;
     border-bottom: 1px solid var(--bd);
     display: flex;
@@ -517,7 +518,7 @@
   }
 
   .panel-title {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
   }
@@ -529,12 +530,23 @@
   }
 
   .icon-btn {
-    width: 24px;
-    height: 24px;
-    padding: 0;
+    width: auto;
+    min-width: calc(24px * var(--ui-scale, 1));
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
+    padding: 2px;
     border: none;
     background: transparent;
     color: var(--dm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-btn :global(svg) {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
   }
 
   .error-banner {
@@ -542,7 +554,7 @@
     background: var(--des);
     border-bottom: 1px solid var(--bd);
     color: var(--de);
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .inline-form {
@@ -556,15 +568,17 @@
   .inline-input {
     flex: 1;
     min-width: 0;
-    height: 24px;
-    padding: 0 6px;
-    font-size: 12px;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    padding: 0 8px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .small-btn {
-    height: 24px;
+    height: auto;
+    min-height: calc(24px * var(--ui-scale, 1));
     padding: 0 8px;
-    font-size: 12px;
+    font-size: var(--font-size-ui-sm, 12px);
   }
 
   .tree-scroll {
@@ -579,9 +593,8 @@
   }
 
   .tree-row {
-    height: 28px;
-    min-height: 28px;
-    line-height: 28px;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
     flex-shrink: 0;
     box-sizing: border-box;
     padding-right: 6px;
@@ -603,18 +616,25 @@
     flex: 1;
     min-width: 0;
     width: 100%;
-    height: 26px;
-    line-height: 26px;
+    height: auto;
+    min-height: calc(26px * var(--ui-scale, 1));
+    line-height: normal;
     box-sizing: border-box;
-    padding: 0 4px;
+    padding: 2px 4px;
     border: none;
     background: transparent;
     color: var(--tx);
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     text-align: left;
+  }
+
+  .row-main :global(svg) {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
   }
 
   .row-main:hover {
@@ -626,13 +646,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .git-badge {
     margin-left: auto;
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--font-size-ui-sm, 12px);
     font-weight: 600;
     padding: 0 4px;
   }
@@ -657,21 +677,27 @@
 
   .context-menu-item {
     width: 100%;
-    height: 28px;
-    min-height: 28px;
-    padding: 0 8px;
+    height: auto;
+    min-height: calc(28px * var(--ui-scale, 1));
+    padding: 2px calc(8px * var(--ui-scale, 1));
     border: none;
     border-radius: var(--radius-ctrl);
     background: transparent;
     color: var(--tx);
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: calc(8px * var(--ui-scale, 1));
     cursor: pointer;
     text-align: left;
     white-space: nowrap;
+  }
+
+  .context-menu-item :global(svg) {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
   }
 
   .context-menu-item:hover {
@@ -713,7 +739,7 @@
   }
 
   .confirm-text {
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--tx);
     word-break: break-all;
   }
@@ -728,7 +754,7 @@
     flex-shrink: 0;
     box-sizing: border-box;
     padding: 16px 12px;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
     text-align: center;
   }

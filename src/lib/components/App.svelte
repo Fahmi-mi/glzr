@@ -170,11 +170,27 @@
 
   $effect(() => {
     if (typeof document !== 'undefined') {
+      const fs = settings.appearance.fontSize;
+      const scale = fs / 14;
       document.documentElement.dataset.theme = settings.appearance.theme;
       document.documentElement.dataset.font = settings.appearance.fontFamily;
+      document.documentElement.style.setProperty('--font-size-code', `${fs}px`);
+      document.documentElement.style.setProperty('--ui-scale', `${scale}`);
       document.documentElement.style.setProperty(
-        '--font-size-code',
-        `${settings.appearance.fontSize}px`
+        '--font-size-ui',
+        `${Math.max(9, Math.round(13 * scale))}px`
+      );
+      document.documentElement.style.setProperty(
+        '--font-size-ui-sm',
+        `${Math.max(8, Math.round(12 * scale))}px`
+      );
+      document.documentElement.style.setProperty(
+        '--font-size-ui-xs',
+        `${Math.max(8, Math.round(11 * scale))}px`
+      );
+      document.documentElement.style.setProperty(
+        '--font-size-ui-lg',
+        `${Math.max(11, Math.round(15 * scale))}px`
       );
     }
   });
@@ -1219,6 +1235,7 @@
             {:else if session.sidebar.panel === 'search'}
               <SearchPanel
                 bind:this={searchPanelRef}
+                fontSize={settings.appearance.fontSize}
                 onSelectMatch={(relPath, line) => {
                   if (projectState.activeFolder) {
                     openFileInPane(`${projectState.activeFolder}/${relPath}`, line);
@@ -1308,7 +1325,7 @@
         <span>{projectState.folderName ?? 'project'}</span>
         {#if repoStatus?.isRepo}
           <span class="status-branch">
-            <GitBranch size={12} strokeWidth={2} />
+            <GitBranch size={13} strokeWidth={2} />
             <span>{repoStatus.detached ? 'detached' : (repoStatus.branch ?? 'main')}</span>
             {#if repoStatus.ahead > 0 || repoStatus.behind > 0}
               <span class="mono">+{repoStatus.ahead} -{repoStatus.behind}</span>
@@ -1367,15 +1384,15 @@
         }}
       >
         <div
-          class="confirm-dialog"
+          class="confirm-dialog ws-modal-dialog"
           role="dialog"
           aria-modal="true"
           aria-label={workspaceModal.mode === 'create' ? 'New Workspace' : 'Rename Workspace'}
         >
-          <h2 class="confirm-title">
+          <h2 class="confirm-title ws-modal-title">
             {workspaceModal.mode === 'create' ? 'New Workspace' : 'Rename Workspace'}
           </h2>
-          <p class="muted">
+          <p class="muted ws-modal-desc">
             {workspaceModal.mode === 'create'
               ? 'Enter workspace name, or accept the sequential default number.'
               : 'Enter a new name for this workspace.'}
@@ -1392,8 +1409,8 @@
             use:focusAndSelect
           />
           <div class="confirm-actions">
-            <button onclick={closeWorkspaceModal}>Cancel</button>
-            <button class="primary" onclick={submitWorkspaceModal}>
+            <button class="ws-modal-btn" onclick={closeWorkspaceModal}>Cancel</button>
+            <button class="primary ws-modal-btn" onclick={submitWorkspaceModal}>
               {workspaceModal.mode === 'create' ? 'Create' : 'Rename'}
             </button>
           </div>
@@ -1557,21 +1574,43 @@
     color: var(--ac);
   }
 
+  .ws-modal-dialog {
+    gap: calc(16px * var(--ui-scale, 1));
+    padding: calc(24px * var(--ui-scale, 1));
+    max-width: calc(420px * var(--ui-scale, 1));
+  }
+
+  .ws-modal-title {
+    font-size: var(--font-size-ui-lg, 15px);
+  }
+
+  .ws-modal-desc {
+    font-size: var(--font-size-ui, 13px);
+  }
+
   .ws-modal-input {
     width: 100%;
-    height: 36px;
-    padding: 0 12px;
+    height: auto;
+    min-height: calc(36px * var(--ui-scale, 1));
+    padding: 0 calc(12px * var(--ui-scale, 1));
     background: var(--el);
     border: 1px solid var(--pbd);
     border-radius: var(--radius-input);
     color: var(--tx);
-    font-size: 13px;
+    font-size: var(--font-size-ui, 13px);
   }
 
   .ws-modal-input:focus {
     outline: none;
     border-color: var(--ac);
     box-shadow: 0 0 0 3px var(--acs);
+  }
+
+  .ws-modal-btn {
+    height: auto;
+    min-height: calc(32px * var(--ui-scale, 1));
+    padding: 0 calc(14px * var(--ui-scale, 1));
+    font-size: var(--font-size-ui, 13px);
   }
 
   .ws-close-btn {
@@ -1748,9 +1787,10 @@
   }
 
   .status-bar {
-    height: 34px;
+    height: auto;
+    min-height: calc(34px * var(--ui-scale, 1));
     flex: none;
-    padding: 0 16px;
+    padding: calc(4px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
     background: var(--cbg);
     -webkit-backdrop-filter: var(--cblur);
     backdrop-filter: var(--cblur);
@@ -1760,7 +1800,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: var(--font-size-ui, 13px);
     color: var(--dm);
   }
 
@@ -1768,14 +1808,20 @@
   .status-right {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: calc(20px * var(--ui-scale, 1));
   }
 
   .status-branch {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--ui-scale, 1));
     color: var(--tx);
+  }
+
+  .status-branch :global(svg) {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
   }
 
   .modal-backdrop {
@@ -1807,7 +1853,7 @@
   }
 
   .confirm-title {
-    font-size: 15px;
+    font-size: var(--font-size-ui-lg, 15px);
     font-weight: 600;
     color: var(--tx);
   }
