@@ -608,6 +608,10 @@ fn sanitize_fontconfig_cache() {
 pub fn configure_linux_webkit_environment() {
     sanitize_fontconfig_cache();
 
+    if std::env::var_os("GTK_OVERLAY_SCROLLING").is_none() {
+        std::env::set_var("GTK_OVERLAY_SCROLLING", "0");
+    }
+
     let has_nvidia = Path::new("/dev/nvidia0").exists()
         || Path::new("/proc/driver/nvidia").exists()
         || Path::new("/sys/module/nvidia").exists();
@@ -651,6 +655,16 @@ pub fn run() {
             #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
+            }
+
+            #[cfg(target_os = "linux")]
+            for (_, window) in app.webview_windows() {
+                let _ = window.with_webview(|webview| {
+                    use webkit2gtk::{SettingsExt, WebViewExt};
+                    if let Some(settings) = webview.inner().settings() {
+                        settings.set_enable_smooth_scrolling(false);
+                    }
+                });
             }
 
             if let (Some(window), Some(state)) =
@@ -769,7 +783,19 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn auto_detects_or_preserves_linux_webkit_environment() {
+        let existing_overlay = std::env::var("GTK_OVERLAY_SCROLLING").ok();
         configure_linux_webkit_environment();
+        if let Some(val) = existing_overlay {
+            assert_eq!(
+                std::env::var("GTK_OVERLAY_SCROLLING").as_deref(),
+                Ok(val.as_str())
+            );
+        } else {
+            assert_eq!(
+                std::env::var("GTK_OVERLAY_SCROLLING").as_deref(),
+                Ok("0")
+            );
+        }
         if Path::new("/dev/nvidia0").exists()
             || Path::new("/proc/driver/nvidia").exists()
             || Path::new("/sys/module/nvidia").exists()

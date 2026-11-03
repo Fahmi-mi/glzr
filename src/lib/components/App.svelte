@@ -1791,9 +1791,8 @@
     min-height: calc(34px * var(--ui-scale, 1));
     flex: none;
     padding: calc(4px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
-    background: var(--cbg);
-    -webkit-backdrop-filter: var(--cblur);
-    backdrop-filter: var(--cblur);
+    background: var(--pbg);
+    contain: layout paint style;
     border: 1px solid var(--pbd);
     border-radius: var(--radius-panel);
     box-shadow: var(--psh);

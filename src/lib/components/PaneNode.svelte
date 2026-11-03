@@ -500,8 +500,7 @@
     border: 1px solid var(--pbd);
     border-radius: var(--radius-panel);
     box-shadow: var(--psh);
-    overflow: hidden;
-    contain: layout paint style;
+    contain: layout style;
   }
 
   .pane.focused {
@@ -529,6 +528,8 @@
     padding: 0 10px;
     background: transparent;
     border-bottom: 1px solid var(--bd);
+    border-top-left-radius: calc(var(--radius-panel) - 1px);
+    border-top-right-radius: calc(var(--radius-panel) - 1px);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -669,6 +670,8 @@
     min-height: 0;
     overflow: hidden;
     display: flex;
+    border-bottom-left-radius: calc(var(--radius-panel) - 1px);
+    border-bottom-right-radius: calc(var(--radius-panel) - 1px);
   }
 
   .empty-pane-card {
