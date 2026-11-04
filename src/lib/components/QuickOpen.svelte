@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fsListWorkspaceFiles } from '$lib/ipc';
   import { fuzzyFilterFiles, parseQuickOpenInput } from '$lib/languages';
+  import { smoothScroll } from '$lib/scroll';
   import FileIcon from '$lib/components/icons/FileIcon.svelte';
 
   interface Props {
@@ -18,14 +19,21 @@
   let loading = $state(false);
   let inputEl = $state<HTMLInputElement | null>(null);
   let listEl = $state<HTMLUListElement | null>(null);
+  let lastNavTime = 0;
+
+  function getEventLag(event: KeyboardEvent): number {
+    const ts = event.timeStamp;
+    if (!ts || ts <= 0) return 0;
+    if (ts > 1e11) return Date.now() - ts;
+    return performance.now() - ts;
+  }
 
   const parsed = $derived(parseQuickOpenInput(queryInput));
   const filteredFiles = $derived(fuzzyFilterFiles(allFiles, parsed.query, 50));
 
   function scrollSelectedIntoView(index: number) {
     if (!listEl) return;
-    const rows = listEl.querySelectorAll<HTMLElement>('.palette-row');
-    const target = rows[index];
+    const target = listEl.children[index]?.firstElementChild as HTMLElement | null;
     if (target) {
       target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
@@ -77,6 +85,14 @@
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
+      if (event.repeat) {
+        const now = performance.now();
+        const lag = getEventLag(event);
+        if (lag > 35 || now - lastNavTime < 24) return;
+        lastNavTime = now;
+      } else {
+        lastNavTime = performance.now();
+      }
       if (filteredFiles.length > 0) {
         selectedIndex = (selectedIndex + 1) % filteredFiles.length;
         scrollSelectedIntoView(selectedIndex);
@@ -85,6 +101,14 @@
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
+      if (event.repeat) {
+        const now = performance.now();
+        const lag = getEventLag(event);
+        if (lag > 35 || now - lastNavTime < 24) return;
+        lastNavTime = now;
+      } else {
+        lastNavTime = performance.now();
+      }
       if (filteredFiles.length > 0) {
         selectedIndex = (selectedIndex - 1 + filteredFiles.length) % filteredFiles.length;
         scrollSelectedIntoView(selectedIndex);
@@ -140,7 +164,7 @@
         {/if}
       </div>
 
-      <ul bind:this={listEl} class="palette-list">
+      <ul bind:this={listEl} class="palette-list" use:smoothScroll>
         {#if loading}
           <li class="empty-row">Loading file list...</li>
         {:else if filteredFiles.length === 0}
@@ -190,9 +214,7 @@
   .palette-card {
     width: 100%;
     max-width: 520px;
-    background: var(--pop-bg);
-    -webkit-backdrop-filter: var(--pop-blur);
-    backdrop-filter: var(--pop-blur);
+    background: var(--pbg);
     border: 1px solid var(--pbd);
     border-radius: var(--radius-dialog);
     box-shadow: var(--shadow-float);
@@ -232,7 +254,9 @@
     list-style: none;
     max-height: 360px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 6px;
+    background: var(--pbg);
   }
 
   .palette-row {

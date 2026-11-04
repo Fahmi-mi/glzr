@@ -3,13 +3,8 @@
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
   import FileIcon from '$lib/components/icons/FileIcon.svelte';
-  import {
-    onBackendEvent,
-    searchCancel,
-    searchStart,
-    type AppErrorPayload,
-    type SearchMatchDto
-  } from '$lib/ipc';
+  import { onBackendEvent, searchCancel, searchStart, type AppErrorPayload, type SearchMatchDto } from '$lib/ipc';
+  import { smoothScroll } from '$lib/scroll';
 
   interface Props {
     fontSize?: number;
@@ -46,14 +41,24 @@
   let results = $state.raw<PreparedMatch[]>([]);
 
   let searchInputEl = $state<HTMLInputElement | null>(null);
+  let resultsViewportEl = $state<HTMLDivElement | null>(null);
   let scrollTop = $state(0);
   let viewportHeight = $state(400);
+  let selectedRowIndex = $state(-1);
+  let lastNavTime = 0;
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let queryCounter = 0;
   let unlistenResults: (() => void) | null = null;
   let unlistenDone: (() => void) | null = null;
   let unlistenError: (() => void) | null = null;
+
+  function getEventLag(event: KeyboardEvent): number {
+    const ts = event.timeStamp;
+    if (!ts || ts <= 0) return 0;
+    if (ts > 1e11) return Date.now() - ts;
+    return performance.now() - ts;
+  }
 
   function splitSnippet(match: SearchMatchDto): PreparedMatch {
     const chars = Array.from(match.snippet);
@@ -117,6 +122,75 @@
     searchInputEl?.select();
   }
 
+  function scrollSelectedRowIntoView(idx: number) {
+    if (!resultsViewportEl) return;
+    const itemTop = idx * rowHeight;
+    const itemBottom = itemTop + rowHeight;
+    if (itemTop < resultsViewportEl.scrollTop) {
+      resultsViewportEl.scrollTop = itemTop;
+    } else if (itemBottom > resultsViewportEl.scrollTop + viewportHeight) {
+      resultsViewportEl.scrollTop = itemBottom - viewportHeight;
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (flatRows.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (event.repeat) {
+        const now = performance.now();
+        const lag = getEventLag(event);
+        if (lag > 35 || now - lastNavTime < 24) return;
+        lastNavTime = now;
+      } else {
+        lastNavTime = performance.now();
+      }
+
+      let next = selectedRowIndex + 1;
+      while (next < flatRows.length && flatRows[next].type !== 'match') {
+        next += 1;
+      }
+      if (next < flatRows.length) {
+        selectedRowIndex = next;
+        scrollSelectedRowIntoView(selectedRowIndex);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (event.repeat) {
+        const now = performance.now();
+        const lag = getEventLag(event);
+        if (lag > 35 || now - lastNavTime < 24) return;
+        lastNavTime = now;
+      } else {
+        lastNavTime = performance.now();
+      }
+
+      let prev = selectedRowIndex - 1;
+      while (prev >= 0 && flatRows[prev].type !== 'match') {
+        prev -= 1;
+      }
+      if (prev >= 0) {
+        selectedRowIndex = prev;
+        scrollSelectedRowIntoView(selectedRowIndex);
+      }
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (selectedRowIndex >= 0 && selectedRowIndex < flatRows.length) {
+        const row = flatRows[selectedRowIndex];
+        if (row.type === 'match') {
+          event.preventDefault();
+          onSelectMatch(row.match.relPath, row.match.line);
+        }
+      }
+    }
+  }
+
   function clearDebounce() {
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer);
@@ -133,6 +207,7 @@
       truncated = false;
       errorMsg = null;
       results = [];
+      selectedRowIndex = -1;
       void searchCancel().catch(() => {});
       return;
     }
@@ -150,6 +225,7 @@
     truncated = false;
     errorMsg = null;
     results = [];
+    selectedRowIndex = -1;
     scrollTop = 0;
 
     try {
@@ -201,7 +277,7 @@
   });
 </script>
 
-<aside class="search-panel">
+<aside class="search-panel" onkeydown={handleKeyDown}>
   <div class="panel-header">
     <span class="panel-title">Search</span>
     {#if results.length > 0}
@@ -283,7 +359,9 @@
   {/if}
 
   <div
+    bind:this={resultsViewportEl}
     class="results-viewport"
+    use:smoothScroll
     bind:clientHeight={viewportHeight}
     onscroll={(e) => {
       scrollTop = (e.currentTarget as HTMLDivElement).scrollTop;
@@ -298,7 +376,7 @@
     {:else}
       <div class="virtual-spacer" style:height="{totalHeight}px">
         <div class="virtual-window" style:transform="translate3d(0, {startIndex * rowHeight}px, 0)">
-          {#each visibleSlice as row (row.key)}
+          {#each visibleSlice as row, sliceIdx (row.key)}
             {#if row.type === 'header'}
               <div class="virtual-row file-header" style:height="{rowHeight}px">
                 <FileIcon filename={row.relPath} size={13} class="file-icon" />
@@ -308,6 +386,7 @@
             {:else}
               <button
                 class="virtual-row match-row"
+                class:selected={startIndex + sliceIdx === selectedRowIndex}
                 style:height="{rowHeight}px"
                 onclick={() => onSelectMatch(row.match.relPath, row.match.line)}
               >
@@ -558,7 +637,8 @@
     padding-left: 20px;
   }
 
-  .match-row:hover {
+  .match-row:hover,
+  .match-row.selected {
     background: var(--acs);
     color: var(--tx);
   }

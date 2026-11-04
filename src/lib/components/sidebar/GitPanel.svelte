@@ -25,6 +25,7 @@
     type GitStatusDto
   } from '$lib/ipc';
   import { badgeColorVar } from '$lib/git';
+  import { smoothScroll } from '$lib/scroll';
 
   interface Props {
     onOpenDiff?: (relPath: string, staged: boolean) => void;
@@ -110,10 +111,18 @@
     });
   }
 
+  let lastNavTime = 0;
+
+  function getEventLag(event: KeyboardEvent): number {
+    const ts = event.timeStamp;
+    if (!ts || ts <= 0) return 0;
+    if (ts > 1e11) return Date.now() - ts;
+    return performance.now() - ts;
+  }
+
   function scrollHighlightedIntoView() {
     if (!popoverEl) return;
-    const items = popoverEl.querySelectorAll<HTMLButtonElement>('.branch-item');
-    const target = items[highlightedIndex];
+    const target = popoverEl.children[highlightedIndex] as HTMLElement | null;
     target?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -162,12 +171,28 @@
       branchDropdownOpen = false;
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
+      if (e.repeat) {
+        const now = performance.now();
+        const lag = getEventLag(e);
+        if (lag > 35 || now - lastNavTime < 24) return;
+        lastNavTime = now;
+      } else {
+        lastNavTime = performance.now();
+      }
       if (branches.length > 0) {
         highlightedIndex = (highlightedIndex + 1) % branches.length;
         scrollHighlightedIntoView();
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      if (e.repeat) {
+        const now = performance.now();
+        const lag = getEventLag(e);
+        if (lag > 35 || now - lastNavTime < 24) return;
+        lastNavTime = now;
+      } else {
+        lastNavTime = performance.now();
+      }
       if (branches.length > 0) {
         highlightedIndex = (highlightedIndex - 1 + branches.length) % branches.length;
         scrollHighlightedIntoView();
@@ -286,6 +311,7 @@
               <div
                 bind:this={popoverEl}
                 class="branch-popover"
+                use:smoothScroll
                 role="listbox"
                 tabindex="-1"
                 aria-label="Git branches"
@@ -341,7 +367,7 @@
       </div>
     {/if}
 
-    <div class="changes-scroll">
+    <div class="changes-scroll" use:smoothScroll>
       {#if statusData.conflicted.length > 0}
         <div class="group-section">
           <div class="group-title">Conflicts ({statusData.conflicted.length})</div>
@@ -461,7 +487,7 @@
   .git-panel {
     width: 100%;
     height: 100%;
-    background: transparent;
+    background: var(--pbg);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -601,9 +627,8 @@
     max-width: 280px;
     max-height: 220px;
     overflow-y: auto;
-    background: var(--pop-bg);
-    -webkit-backdrop-filter: var(--pop-blur);
-    backdrop-filter: var(--pop-blur);
+    overscroll-behavior: contain;
+    background: var(--pbg);
     border: 1px solid var(--pbd);
     border-radius: var(--radius-menu);
     box-shadow: var(--shadow-float);
@@ -708,6 +733,7 @@
   .changes-scroll {
     flex: 1;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 8px 6px;
     display: flex;
     flex-direction: column;

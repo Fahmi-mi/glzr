@@ -28,6 +28,7 @@
     type FileReadDto
   } from '$lib/ipc';
   import { detectLanguage, loadLanguageExtension } from '$lib/languages';
+  import { attachSmoothScroll } from '$lib/scroll';
   import ImageTab from './ImageTab.svelte';
 
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'undefined') {
@@ -116,17 +117,25 @@
         if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
           return false;
         }
+        const now = performance.now();
+        if (
+          event.repeat ||
+          now - lastNavTime < 120 ||
+          event.key === 'PageDown' ||
+          event.key === 'PageUp'
+        ) {
+          pauseHeavyDecorations();
+        }
         if (event.repeat) {
-          const now = performance.now();
           const lag = getEventLag(event);
-          if (lag > 25 || now - lastNavTime < 24) {
+          if (lag > 35 || now - lastNavTime < 24) {
             event.preventDefault();
             event.stopPropagation();
             return true;
           }
           lastNavTime = now;
         } else {
-          lastNavTime = performance.now();
+          lastNavTime = now;
         }
         return false;
       },
@@ -142,10 +151,40 @@
   let editorView: EditorView | null = null;
   const languageCompartment = new Compartment();
   const readOnlyCompartment = new Compartment();
+  const bracketMatchingCompartment = new Compartment();
+  let bracketMatchingActive = true;
+  let bracketIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  let smoothScrollCleanup: { destroy: () => void } | null = null;
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   let metaRafId: number | null = null;
   let activeLoadToken = 0;
   let unlistenFsChanged: (() => void) | null = null;
+
+  function clearBracketIdleTimer() {
+    if (bracketIdleTimer !== null) {
+      clearTimeout(bracketIdleTimer);
+      bracketIdleTimer = null;
+    }
+  }
+
+  function pauseHeavyDecorations() {
+    clearBracketIdleTimer();
+    if (bracketMatchingActive && editorView) {
+      bracketMatchingActive = false;
+      editorView.dispatch({
+        effects: bracketMatchingCompartment.reconfigure([])
+      });
+    }
+    bracketIdleTimer = setTimeout(() => {
+      bracketIdleTimer = null;
+      if (!bracketMatchingActive && editorView) {
+        bracketMatchingActive = true;
+        editorView.dispatch({
+          effects: bracketMatchingCompartment.reconfigure(bracketMatching())
+        });
+      }
+    }, 50);
+  }
 
   const glzrHighlightStyle = HighlightStyle.define([
     {
@@ -367,6 +406,12 @@
   function destroyEditor() {
     clearDraftTimer();
     clearMetaRaf();
+    clearBracketIdleTimer();
+    bracketMatchingActive = true;
+    if (smoothScrollCleanup) {
+      smoothScrollCleanup.destroy();
+      smoothScrollCleanup = null;
+    }
     if (editorView) {
       editorView.destroy();
       editorView = null;
@@ -408,7 +453,7 @@
         lineNumbers(),
         history(),
         drawSelection(),
-        bracketMatching(),
+        bracketMatchingCompartment.of(bracketMatching()),
         closeBrackets(),
         search({ top: true }),
         highlightSelectionMatches(),
@@ -441,6 +486,10 @@
     editorView = new EditorView({
       state,
       parent: host
+    });
+
+    smoothScrollCleanup = attachSmoothScroll(editorView.scrollDOM, {
+      onScrollActivity: pauseHeavyDecorations
     });
 
     if (targetLine && targetLine > 0) {
@@ -605,6 +654,11 @@
     activeLoadToken++;
     unlistenFsChanged?.();
     clearMetaRaf();
+    clearBracketIdleTimer();
+    if (smoothScrollCleanup) {
+      smoothScrollCleanup.destroy();
+      smoothScrollCleanup = null;
+    }
     destroyEditor();
   });
 </script>
@@ -711,7 +765,7 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    background: transparent;
+    background: var(--pbg);
   }
 
   .state-box {
@@ -808,6 +862,7 @@
     min-height: 0;
     width: 100%;
     overflow: hidden;
+    background: var(--pbg);
   }
 
   .muted {

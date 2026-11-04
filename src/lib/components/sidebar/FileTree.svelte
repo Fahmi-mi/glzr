@@ -23,6 +23,7 @@
   } from '$lib/ipc';
   import { badgeColorVar } from '$lib/git';
   import { clampMenuCoordinates } from '$lib/menu';
+  import { smoothScroll } from '$lib/scroll';
 
   interface Props {
     workspaceRoot: string;
@@ -383,7 +384,7 @@
     </div>
   {/if}
 
-  <div class="tree-scroll" onscroll={closeContextMenu}>
+  <div class="tree-scroll" use:smoothScroll onscroll={closeContextMenu}>
     {#if flatRows.length === 0}
       <div class="empty-box">Folder is empty</div>
     {:else}
@@ -490,7 +491,7 @@
   .file-tree-panel {
     width: 100%;
     height: 100%;
-    background: transparent;
+    background: var(--pbg);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -576,6 +577,8 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    background: var(--pbg);
     padding: 6px;
     display: flex;
     flex-direction: column;
