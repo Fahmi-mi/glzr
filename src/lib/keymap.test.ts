@@ -139,4 +139,140 @@ describe('focus-based keymap and command palette', () => {
     expect(filtered).toHaveLength(1);
     expect(filtered[0].id).toBe('1');
   });
+
+  it('resolves tab navigation shortcuts across terminal and non-terminal contexts', () => {
+    const kb = createDefaultSettings().keybindings;
+
+    expect(
+      matchesKeyCombo(
+        { key: '[', code: 'BracketLeft', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        'Alt+['
+      )
+    ).toBe(true);
+
+    expect(
+      matchesKeyCombo(
+        { key: ']', code: 'BracketRight', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        'Alt+]'
+      )
+    ).toBe(true);
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '[', code: 'BracketLeft', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        true,
+        kb
+      )
+    ).toBe('prev_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: ']', code: 'BracketRight', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        true,
+        kb
+      )
+    ).toBe('next_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '[', code: 'BracketLeft', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('prev_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: ']', code: 'BracketRight', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('next_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: 'PageUp', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        true,
+        kb
+      )
+    ).toBe('prev_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: 'PageDown', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        true,
+        kb
+      )
+    ).toBe('next_tab');
+
+    const customKb = {
+      ...kb,
+      prevTab: 'Alt+H',
+      nextTab: 'Alt+L'
+    };
+
+    expect(
+      resolveGlobalShortcut(
+        { key: 'h', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        true,
+        customKb
+      )
+    ).toBe('prev_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: 'l', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        true,
+        customKb
+      )
+    ).toBe('next_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '{', code: 'BracketLeft', altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+        false,
+        kb
+      )
+    ).toBeNull();
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '}', code: 'BracketRight', altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+        false,
+        kb
+      )
+    ).toBeNull();
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '[', code: 'BracketLeft', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        false,
+        customKb
+      )
+    ).toBeNull();
+
+    expect(
+      resolveGlobalShortcut(
+        { key: ']', code: 'BracketRight', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        false,
+        customKb
+      )
+    ).toBeNull();
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '“', code: 'BracketLeft', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('prev_tab');
+
+    expect(
+      resolveGlobalShortcut(
+        { key: '[', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        false,
+        kb
+      )
+    ).toBe('prev_tab');
+  });
 });

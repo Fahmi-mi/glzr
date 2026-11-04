@@ -608,11 +608,12 @@ fn sanitize_fontconfig_cache() {
 pub fn configure_linux_webkit_environment() {
     sanitize_fontconfig_cache();
 
-    let has_nvidia = Path::new("/dev/nvidia0").exists()
-        || Path::new("/proc/driver/nvidia").exists()
-        || Path::new("/sys/module/nvidia").exists();
-    if has_nvidia && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    if std::env::var_os("GTK_OVERLAY_SCROLLING").is_none() {
+        std::env::set_var("GTK_OVERLAY_SCROLLING", "0");
+    }
+
+    if std::env::var_os("__NV_PRIME_RENDER_OFFLOAD").is_none() {
+        std::env::set_var("__NV_PRIME_RENDER_OFFLOAD", "0");
     }
 }
 
@@ -651,6 +652,19 @@ pub fn run() {
             #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
+            }
+
+            #[cfg(target_os = "linux")]
+            for (_, window) in app.webview_windows() {
+                let _ = window.with_webview(|webview| {
+                    use webkit2gtk::{SettingsExt, WebViewExt};
+                    if let Some(settings) = webview.inner().settings() {
+                        settings.set_enable_smooth_scrolling(false);
+                        settings.set_hardware_acceleration_policy(
+                            webkit2gtk::HardwareAccelerationPolicy::Always,
+                        );
+                    }
+                });
             }
 
             if let (Some(window), Some(state)) =
@@ -769,15 +783,37 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn auto_detects_or_preserves_linux_webkit_environment() {
+        let existing_overlay = std::env::var("GTK_OVERLAY_SCROLLING").ok();
+        let existing_dri_prime = std::env::var("DRI_PRIME").ok();
+        let existing_nv_prime = std::env::var("__NV_PRIME_RENDER_OFFLOAD").ok();
+        let existing_dmabuf = std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").ok();
         configure_linux_webkit_environment();
-        if Path::new("/dev/nvidia0").exists()
-            || Path::new("/proc/driver/nvidia").exists()
-            || Path::new("/sys/module/nvidia").exists()
-        {
+        if let Some(val) = existing_overlay {
             assert_eq!(
-                std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").as_deref(),
-                Ok("1")
+                std::env::var("GTK_OVERLAY_SCROLLING").as_deref(),
+                Ok(val.as_str())
+            );
+        } else {
+            assert_eq!(
+                std::env::var("GTK_OVERLAY_SCROLLING").as_deref(),
+                Ok("0")
             );
         }
+        assert_eq!(std::env::var("DRI_PRIME").ok(), existing_dri_prime);
+        if let Some(val) = existing_nv_prime {
+            assert_eq!(
+                std::env::var("__NV_PRIME_RENDER_OFFLOAD").as_deref(),
+                Ok(val.as_str())
+            );
+        } else {
+            assert_eq!(
+                std::env::var("__NV_PRIME_RENDER_OFFLOAD").as_deref(),
+                Ok("0")
+            );
+        }
+        assert_eq!(
+            std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").ok(),
+            existing_dmabuf
+        );
     }
 }

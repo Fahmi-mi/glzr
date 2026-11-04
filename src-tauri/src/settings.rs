@@ -186,6 +186,8 @@ pub struct KeybindingsSettings {
     pub close_pane: String,
     pub maximize_pane: String,
     pub terminal_find: String,
+    pub prev_tab: String,
+    pub next_tab: String,
 }
 
 impl Default for KeybindingsSettings {
@@ -203,6 +205,8 @@ impl Default for KeybindingsSettings {
             close_pane: "Alt+Q".to_string(),
             maximize_pane: "Alt+M".to_string(),
             terminal_find: "Alt+S".to_string(),
+            prev_tab: "Alt+[".to_string(),
+            next_tab: "Alt+]".to_string(),
         }
     }
 }
@@ -320,6 +324,8 @@ struct KeybindingsToml {
     close_pane: String,
     maximize_pane: String,
     terminal_find: String,
+    prev_tab: String,
+    next_tab: String,
 }
 
 pub fn load_settings_from_path(path: &Path) -> AppResult<SettingsLoadDto> {
@@ -403,6 +409,8 @@ pub fn save_settings_to_path(path: &Path, settings: &AppSettings) -> AppResult<(
             close_pane: settings.keybindings.close_pane.clone(),
             maximize_pane: settings.keybindings.maximize_pane.clone(),
             terminal_find: settings.keybindings.terminal_find.clone(),
+            prev_tab: settings.keybindings.prev_tab.clone(),
+            next_tab: settings.keybindings.next_tab.clone(),
         },
     };
 
@@ -506,6 +514,8 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
         read_kb!(close_pane, "close_pane");
         read_kb!(maximize_pane, "maximize_pane");
         read_kb!(terminal_find, "terminal_find");
+        read_kb!(prev_tab, "prev_tab");
+        read_kb!(next_tab, "next_tab");
     }
 
     let kb_entries = [
@@ -521,6 +531,8 @@ pub fn parse_and_validate_settings_toml(raw: &str) -> SettingsLoadDto {
         ("close_pane", &settings.keybindings.close_pane),
         ("maximize_pane", &settings.keybindings.maximize_pane),
         ("terminal_find", &settings.keybindings.terminal_find),
+        ("prev_tab", &settings.keybindings.prev_tab),
+        ("next_tab", &settings.keybindings.next_tab),
     ];
 
     let mut seen = HashSet::new();
@@ -586,5 +598,22 @@ quick_open = "Alt+P"
         assert!(!dto.warnings.is_empty());
         assert_eq!(fs::read_to_string(&path)?, "[[[broken toml");
         Ok(())
+    }
+
+    #[test]
+    fn parses_custom_tab_keybindings_and_defaults() {
+        let default_dto = parse_and_validate_settings_toml("");
+        assert_eq!(default_dto.settings.keybindings.prev_tab, "Alt+[");
+        assert_eq!(default_dto.settings.keybindings.next_tab, "Alt+]");
+
+        let raw = r#"
+[keybindings]
+prev_tab = "Alt+["
+next_tab = "Alt+]"
+"#;
+        let custom_dto = parse_and_validate_settings_toml(raw);
+        assert_eq!(custom_dto.settings.keybindings.prev_tab, "Alt+[");
+        assert_eq!(custom_dto.settings.keybindings.next_tab, "Alt+]");
+        assert!(custom_dto.warnings.is_empty());
     }
 }

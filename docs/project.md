@@ -309,7 +309,7 @@ Set awal: JS/TS, JSON, HTML, CSS, Markdown, Rust, Go, Python, YAML, TOML, Shell,
 
 - Satu jendela utama. Ukuran awal 1280×800, minimum 800×500. Ukuran dan posisi terakhir diingat dan dipulihkan.
 - Posisi tersimpan yang berada di luar layar (misalnya monitor dicabut) dikoreksi ke monitor yang tersedia.
-- Title bar bawaan sistem, tanpa title bar custom. Judul jendela: "nama-folder — glzr", atau "glzr" kalau belum ada folder.
+- Title bar bawaan sistem, tanpa title bar custom. Judul jendela: "nama-folder - glzr", atau "glzr" kalau belum ada folder.
 - F11 untuk fullscreen.
 
 ---
@@ -467,7 +467,7 @@ Aplikasi (aktif di mana saja, termasuk saat fokus di terminal):
 | Tutup pane | Alt+Q |
 | Maximize pane | Alt+M |
 | Pindah fokus antar pane | Alt+←, Alt+→, Alt+↑, Alt+↓ |
-| Tab berikutnya / sebelumnya | Alt+PageDown / Alt+PageUp |
+| Tab berikutnya / sebelumnya | Alt+] / Alt+[ |
 | Pindah ke workspace 1-9 | Alt+1 … Alt+9 |
 | Zoom font masuk / keluar / reset | Alt+= / Alt+- / Alt+0 |
 
@@ -680,6 +680,8 @@ split_down = "Alt+J"
 close_pane = "Alt+Q"
 maximize_pane = "Alt+M"
 terminal_find = "Alt+S"
+prev_tab = "Alt+["
+next_tab = "Alt+]"
 ```
 
 Aturan:
