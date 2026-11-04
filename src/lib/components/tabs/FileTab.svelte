@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import ExternalLink from '@lucide/svelte/icons/external-link';
-  import { EditorSelection, EditorState, Compartment } from '@codemirror/state';
+  import { EditorSelection, EditorState, Compartment, Prec } from '@codemirror/state';
   import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view';
   import {
     defaultKeymap,
@@ -28,6 +28,7 @@
     type FileReadDto
   } from '$lib/ipc';
   import { detectLanguage, loadLanguageExtension } from '$lib/languages';
+  import { attachSmoothScroll } from '$lib/scroll';
   import ImageTab from './ImageTab.svelte';
 
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'undefined') {
@@ -74,15 +75,116 @@
   let isDirty = $state(false);
   let savedContent = $state('');
   let lastKnownMtimeMs = $state(0);
-  let cursorLine = $state(1);
-  let cursorCol = $state(1);
+  let cursorLine = 1;
+  let cursorCol = 1;
+  let cachedLangLabel = 'Plain Text';
+  let cachedEncodingLabel = 'UTF-8';
+  let cachedLineEndingLabel: 'LF' | 'CRLF' = 'LF';
+  let lastEmittedLine = 0;
+  let lastEmittedCol = 0;
+  let lastMetaEmitTime = 0;
+
+  const navKeys = new Set([
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'PageUp',
+    'PageDown',
+    'Home',
+    'End'
+  ]);
+
+  let lastNavTime = 0;
+
+  function getEventLag(event: KeyboardEvent): number {
+    const ts = event.timeStamp;
+    if (!ts || ts <= 0) {
+      return 0;
+    }
+    if (ts > 1e11) {
+      return Date.now() - ts;
+    }
+    return performance.now() - ts;
+  }
+
+  const navKeyThrottle = Prec.highest(
+    EditorView.domEventHandlers({
+      keydown(event) {
+        if (!navKeys.has(event.key) || event.altKey || event.ctrlKey || event.metaKey) {
+          return false;
+        }
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+          return false;
+        }
+        const now = performance.now();
+        if (
+          event.repeat ||
+          now - lastNavTime < 120 ||
+          event.key === 'PageDown' ||
+          event.key === 'PageUp'
+        ) {
+          pauseHeavyDecorations();
+        }
+        if (event.repeat) {
+          const lag = getEventLag(event);
+          if (lag > 35 || now - lastNavTime < 24) {
+            event.preventDefault();
+            event.stopPropagation();
+            return true;
+          }
+          lastNavTime = now;
+        } else {
+          lastNavTime = now;
+        }
+        return false;
+      },
+      keyup(event) {
+        if (navKeys.has(event.key)) {
+          lastNavTime = 0;
+        }
+        return false;
+      }
+    })
+  );
 
   let editorView: EditorView | null = null;
   const languageCompartment = new Compartment();
   const readOnlyCompartment = new Compartment();
+  const bracketMatchingCompartment = new Compartment();
+  let bracketMatchingActive = true;
+  let bracketIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  let smoothScrollCleanup: { destroy: () => void } | null = null;
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
+  let metaRafId: number | null = null;
   let activeLoadToken = 0;
   let unlistenFsChanged: (() => void) | null = null;
+
+  function clearBracketIdleTimer() {
+    if (bracketIdleTimer !== null) {
+      clearTimeout(bracketIdleTimer);
+      bracketIdleTimer = null;
+    }
+  }
+
+  function pauseHeavyDecorations() {
+    clearBracketIdleTimer();
+    if (bracketMatchingActive && editorView) {
+      bracketMatchingActive = false;
+      editorView.dispatch({
+        effects: bracketMatchingCompartment.reconfigure([])
+      });
+    }
+    bracketIdleTimer = setTimeout(() => {
+      bracketIdleTimer = null;
+      if (!bracketMatchingActive && editorView) {
+        bracketMatchingActive = true;
+        editorView.dispatch({
+          effects: bracketMatchingCompartment.reconfigure(bracketMatching())
+        });
+      }
+    }, 50);
+  }
 
   const glzrHighlightStyle = HighlightStyle.define([
     {
@@ -123,20 +225,17 @@
       lineHeight: '24px'
     },
     '.cm-scroller': {
+      height: '100%',
       backgroundColor: 'var(--pbg)',
       fontFamily: 'var(--font-mono)',
       lineHeight: '24px',
       overflow: 'auto',
       overscrollBehavior: 'contain',
-      WebkitOverflowScrolling: 'touch',
       WebkitFontSmoothing: 'antialiased',
-      scrollBehavior: 'auto',
-      willChange: 'scroll-position',
-      transform: 'translateZ(0)'
+      scrollBehavior: 'auto'
     },
     '.cm-line': {
-      lineHeight: '24px',
-      contain: 'layout style'
+      lineHeight: '24px'
     },
     '.cm-lineNumbers .cm-gutterElement': {
       lineHeight: '24px',
@@ -230,17 +329,47 @@
     return 'UTF-8';
   }
 
-  function emitMeta(data: FileReadDto | null, line: number, col: number) {
+  function clearMetaRaf() {
+    if (metaRafId !== null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(metaRafId);
+      }
+      metaRafId = null;
+    }
+  }
+
+  function emitMeta(data: FileReadDto | null, line: number, col: number, immediate = false) {
     if (!data || !onMetaChange) return;
-    const langInfo = detectLanguage(path);
-    onMetaChange({
-      language: data.kind === 'image' ? 'Image' : langInfo.label,
-      encoding: formatEncodingLabel(data.encoding),
-      lineEnding: data.lineEnding === 'crlf' ? 'CRLF' : 'LF',
-      line,
-      col,
-      kind: data.kind
-    });
+    if (line === lastEmittedLine && col === lastEmittedCol) return;
+
+    clearMetaRaf();
+
+    const doEmit = () => {
+      metaRafId = null;
+      lastEmittedLine = line;
+      lastEmittedCol = col;
+      lastMetaEmitTime = performance.now();
+      if (!onMetaChange) return;
+      onMetaChange({
+        language: data.kind === 'image' ? 'Image' : cachedLangLabel,
+        encoding: cachedEncodingLabel,
+        lineEnding: cachedLineEndingLabel,
+        line,
+        col,
+        kind: data.kind
+      });
+    };
+
+    const now = performance.now();
+    if (immediate || now - lastMetaEmitTime > 80) {
+      doEmit();
+    } else {
+      metaRafId = requestAnimationFrame(doEmit);
+    }
+  }
+
+  export function focus(): void {
+    editorView?.focus();
   }
 
   export async function save(): Promise<boolean> {
@@ -280,6 +409,13 @@
 
   function destroyEditor() {
     clearDraftTimer();
+    clearMetaRaf();
+    clearBracketIdleTimer();
+    bracketMatchingActive = true;
+    if (smoothScrollCleanup) {
+      smoothScrollCleanup.destroy();
+      smoothScrollCleanup = null;
+    }
     if (editorView) {
       editorView.destroy();
       editorView = null;
@@ -317,10 +453,11 @@
     const state = EditorState.create({
       doc: initialDoc,
       extensions: [
+        navKeyThrottle,
         lineNumbers(),
         history(),
         drawSelection(),
-        bracketMatching(),
+        bracketMatchingCompartment.of(bracketMatching()),
         closeBrackets(),
         search({ top: true }),
         highlightSelectionMatches(),
@@ -355,8 +492,20 @@
       parent: host
     });
 
+    smoothScrollCleanup = attachSmoothScroll(editorView.scrollDOM, {
+      onScrollActivity: pauseHeavyDecorations
+    });
+
     if (targetLine && targetLine > 0) {
       jumpToLine(editorView, targetLine);
+    } else if (
+      typeof document !== 'undefined' &&
+      !(
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement
+      )
+    ) {
+      editorView.focus();
     }
 
     if (!data.disableHighlight) {
@@ -390,7 +539,12 @@
       svgMode = 'preview';
       cursorLine = 1;
       cursorCol = 1;
-      emitMeta(data, 1, 1);
+      cachedLangLabel = detectLanguage(targetPath).label;
+      cachedEncodingLabel = formatEncodingLabel(data.encoding);
+      cachedLineEndingLabel = data.lineEnding === 'crlf' ? 'CRLF' : 'LF';
+      lastEmittedLine = 0;
+      lastEmittedCol = 0;
+      emitMeta(data, 1, 1, true);
 
       if (data.kind === 'text' || data.kind === 'svg') {
         const draft = await fsLoadDraft(targetPath).catch(() => null);
@@ -511,6 +665,12 @@
   onDestroy(() => {
     activeLoadToken++;
     unlistenFsChanged?.();
+    clearMetaRaf();
+    clearBracketIdleTimer();
+    if (smoothScrollCleanup) {
+      smoothScrollCleanup.destroy();
+      smoothScrollCleanup = null;
+    }
     destroyEditor();
   });
 </script>
@@ -617,7 +777,7 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    background: transparent;
+    background: var(--pbg);
   }
 
   .state-box {
@@ -714,7 +874,7 @@
     min-height: 0;
     width: 100%;
     overflow: hidden;
-    contain: strict;
+    background: var(--pbg);
   }
 
   .muted {

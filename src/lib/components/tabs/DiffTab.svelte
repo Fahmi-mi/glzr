@@ -12,6 +12,7 @@
     type GitDiffDto
   } from '$lib/ipc';
   import { parseHunkLines } from '$lib/git';
+  import { smoothScroll } from '$lib/scroll';
 
   interface Props {
     relPath: string;
@@ -127,7 +128,7 @@
     </div>
   {/if}
 
-  <div class="diff-scroll">
+  <div class="diff-scroll" use:smoothScroll>
     {#if loading}
       <div class="empty-box">
         <p class="muted">Loading diff...</p>
@@ -299,6 +300,8 @@
   .diff-scroll {
     flex: 1;
     overflow: auto;
+    overscroll-behavior: contain;
+    background: var(--pbg);
     padding: 16px 24px;
   }
 

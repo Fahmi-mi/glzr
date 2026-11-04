@@ -160,6 +160,8 @@ export interface KeybindingsSettingsDto {
   closePane: string;
   maximizePane: string;
   terminalFind: string;
+  prevTab: string;
+  nextTab: string;
 }
 
 export interface AppSettingsDto {
@@ -239,7 +241,9 @@ export function createDefaultSettings(): AppSettingsDto {
       splitDown: 'Alt+J',
       closePane: 'Alt+Q',
       maximizePane: 'Alt+M',
-      terminalFind: 'Alt+S'
+      terminalFind: 'Alt+S',
+      prevTab: 'Alt+[',
+      nextTab: 'Alt+]'
     }
   };
 }
