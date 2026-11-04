@@ -126,7 +126,9 @@
 
   const focusedPaneId = $derived<string>(
     activeWorkspace
-      ? (focusedPaneByWs[activeWorkspace.id] ?? getFirstPaneId(activeWorkspace.root))
+      ? (focusedPaneByWs[activeWorkspace.id] && findPaneById(activeWorkspace.root, focusedPaneByWs[activeWorkspace.id])
+          ? focusedPaneByWs[activeWorkspace.id]
+          : getFirstPaneId(activeWorkspace.root))
       : ''
   );
 
@@ -244,6 +246,19 @@
     window.addEventListener('mouseup', handleUp);
   }
 
+  function handleSelectNextTab(delta: 1 | -1) {
+    if (!activeWorkspace) return;
+    const pane =
+      findPaneById(activeWorkspace.root, focusedPaneId) ??
+      findPaneById(activeWorkspace.root, getFirstPaneId(activeWorkspace.root));
+    if (!pane || pane.tabs.length <= 1) return;
+    focusedPaneByWs[activeWorkspace.id] = pane.id;
+    const curIdx = pane.tabs.findIndex((t) => t.id === pane.activeTabId);
+    const validCurIdx = curIdx >= 0 ? curIdx : 0;
+    const nextIdx = (validCurIdx + delta + pane.tabs.length) % pane.tabs.length;
+    pane.activeTabId = pane.tabs[nextIdx].id;
+  }
+
   const paletteActions = $derived.by<PaletteEntry[]>(() => {
     const kb = settings.keybindings;
     const entries: PaletteEntry[] = [
@@ -339,6 +354,22 @@
             requestCloseTab(focusedPane.id, activeTab.id);
           }
         }
+      },
+      {
+        id: 'act:prev-tab',
+        label: 'Previous tab',
+        category: 'Action',
+        shortcut: kb.prevTab,
+        keywords: 'previous prev tab switch cycle back',
+        run: () => handleSelectNextTab(-1)
+      },
+      {
+        id: 'act:next-tab',
+        label: 'Next tab',
+        category: 'Action',
+        shortcut: kb.nextTab,
+        keywords: 'next tab switch cycle forward',
+        run: () => handleSelectNextTab(1)
       },
       {
         id: 'act:close-pane',
@@ -679,6 +710,7 @@
     const action = resolveGlobalShortcut(
       {
         key: event.key,
+        code: event.code,
         altKey: event.altKey,
         ctrlKey: event.ctrlKey,
         shiftKey: event.shiftKey,
@@ -756,15 +788,11 @@
         break;
       }
       case 'next_tab':
-      case 'prev_tab': {
-        if (focusedPane && focusedPane.tabs.length > 1) {
-          const curIdx = focusedPane.tabs.findIndex((t) => t.id === focusedPane.activeTabId);
-          const delta = action === 'next_tab' ? 1 : -1;
-          const nextIdx = (curIdx + delta + focusedPane.tabs.length) % focusedPane.tabs.length;
-          focusedPane.activeTabId = focusedPane.tabs[nextIdx].id;
-        }
+        handleSelectNextTab(1);
         break;
-      }
+      case 'prev_tab':
+        handleSelectNextTab(-1);
+        break;
       case 'zoom_in':
         adjustCodeFontSize(1);
         break;

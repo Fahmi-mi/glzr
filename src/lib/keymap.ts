@@ -6,6 +6,7 @@ export interface KeyEventInput {
   ctrlKey: boolean;
   shiftKey: boolean;
   metaKey: boolean;
+  code?: string;
 }
 
 export type GlobalShortcutAction =
@@ -50,7 +51,12 @@ export function matchesKeyCombo(event: KeyEventInput, combo: string): boolean {
   if (hasCtrlOrMeta !== wantCtrl) return false;
   if (event.shiftKey !== wantShift) return false;
 
-  return event.key.toLowerCase() === targetKey;
+  const keyLower = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+  if (keyLower === targetKey) return true;
+  if ((targetKey === '[' || targetKey === 'bracketleft') && (keyLower === '[' || event.code === 'BracketLeft')) return true;
+  if ((targetKey === ']' || targetKey === 'bracketright') && (keyLower === ']' || event.code === 'BracketRight')) return true;
+
+  return false;
 }
 
 export function resolveGlobalShortcut(
@@ -73,7 +79,9 @@ export function resolveGlobalShortcut(
     ['split_right', keybindings.splitRight],
     ['split_down', keybindings.splitDown],
     ['close_pane', keybindings.closePane],
-    ['maximize_pane', keybindings.maximizePane]
+    ['maximize_pane', keybindings.maximizePane],
+    ['prev_tab', keybindings.prevTab],
+    ['next_tab', keybindings.nextTab]
   ];
 
   for (const [action, combo] of actionEntries) {
@@ -107,13 +115,25 @@ export function resolveGlobalShortcut(
   const altOnly = event.altKey && !event.ctrlKey && !event.metaKey;
   if (!altOnly) return null;
 
-  if (event.key === 'ArrowLeft') return 'pane_left';
-  if (event.key === 'ArrowRight') return 'pane_right';
-  if (event.key === 'ArrowUp') return 'pane_up';
-  if (event.key === 'ArrowDown') return 'pane_down';
+  if (!event.shiftKey && event.key === 'ArrowLeft') return 'pane_left';
+  if (!event.shiftKey && event.key === 'ArrowRight') return 'pane_right';
+  if (!event.shiftKey && event.key === 'ArrowUp') return 'pane_up';
+  if (!event.shiftKey && event.key === 'ArrowDown') return 'pane_down';
 
-  if (event.key === 'PageDown') return 'next_tab';
-  if (event.key === 'PageUp') return 'prev_tab';
+  if (
+    !event.shiftKey &&
+    (event.key === 'PageDown' ||
+      (!keybindings.nextTab && (event.key === ']' || event.code === 'BracketRight')))
+  ) {
+    return 'next_tab';
+  }
+  if (
+    !event.shiftKey &&
+    (event.key === 'PageUp' ||
+      (!keybindings.prevTab && (event.key === '[' || event.code === 'BracketLeft')))
+  ) {
+    return 'prev_tab';
+  }
 
   if (event.key === '=' || event.key === '+') return 'zoom_in';
   if (event.key === '-') return 'zoom_out';

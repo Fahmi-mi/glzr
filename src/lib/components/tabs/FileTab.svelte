@@ -111,7 +111,7 @@
   const navKeyThrottle = Prec.highest(
     EditorView.domEventHandlers({
       keydown(event) {
-        if (!navKeys.has(event.key)) {
+        if (!navKeys.has(event.key) || event.altKey || event.ctrlKey || event.metaKey) {
           return false;
         }
         if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
@@ -368,6 +368,10 @@
     }
   }
 
+  export function focus(): void {
+    editorView?.focus();
+  }
+
   export async function save(): Promise<boolean> {
     if (!fileData || !editorView) return true;
     if (fileData.encoding === 'non-utf8') return false;
@@ -494,6 +498,14 @@
 
     if (targetLine && targetLine > 0) {
       jumpToLine(editorView, targetLine);
+    } else if (
+      typeof document !== 'undefined' &&
+      !(
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement
+      )
+    ) {
+      editorView.focus();
     }
 
     if (!data.disableHighlight) {

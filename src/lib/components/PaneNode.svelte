@@ -219,6 +219,7 @@
     class:focused={node.id === focusedPaneId}
     class:drag-over={dragOverPane}
     onmousedown={() => onFocusPane(node.id)}
+    onfocusin={() => onFocusPane(node.id)}
     ondragover={(e) => {
       e.preventDefault();
       dragOverPane = true;
