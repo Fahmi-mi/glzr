@@ -11,6 +11,7 @@
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import FileIcon from '$lib/components/icons/FileIcon.svelte';
   import {
+    clipboardWriteText,
     fsCreateDir,
     fsCreateFile,
     fsListDir,
@@ -224,6 +225,7 @@
   }
 
   function copyPathToClipboard(path: string) {
+    void clipboardWriteText(path).catch(() => {});
     void navigator.clipboard.writeText(path).catch(() => {});
   }
 

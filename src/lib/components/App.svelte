@@ -1589,7 +1589,7 @@
     border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 
@@ -1664,7 +1664,7 @@
     border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 
@@ -1681,7 +1681,7 @@
     border-radius: var(--radius-input);
     background: transparent;
     color: var(--dm);
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 
@@ -1711,7 +1711,7 @@
     height: 24px;
     padding: 0 10px;
     font-size: 12px;
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 
@@ -1752,7 +1752,7 @@
     background: transparent;
     color: var(--dm);
     font-size: 13px;
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 

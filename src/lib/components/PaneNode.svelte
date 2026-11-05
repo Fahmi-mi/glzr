@@ -575,7 +575,7 @@
     background: transparent;
     color: var(--dm);
     gap: 8px;
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 
