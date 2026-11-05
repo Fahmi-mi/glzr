@@ -12,6 +12,8 @@
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
   import {
+    clipboardReadText,
+    clipboardWriteText,
     onBackendEvent,
     openExternal,
     ptyKill,
@@ -71,6 +73,8 @@
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let unlistenOutput: (() => void) | null = null;
   let unlistenExit: (() => void) | null = null;
+  let handleAuxClick: ((ev: MouseEvent) => void) | null = null;
+  let handleDomPaste: ((ev: ClipboardEvent) => void) | null = null;
 
   function scheduleFitAndResize() {
     if (!visible || !term || !fitAddon) return;
@@ -92,13 +96,26 @@
     if (!term) return;
     fontSize = clampTerminalFontSize(fontSize + delta);
     term.options.fontSize = fontSize;
+    canvasAddon?.clearTextureAtlas();
     scheduleFitAndResize();
   }
 
-  async function handleClipboardPaste() {
+  async function handleClipboardPaste(selection?: 'clipboard' | 'primary') {
     if (!term) return;
     try {
-      const text = await navigator.clipboard.readText();
+      let text = '';
+      try {
+        text = await clipboardReadText(selection);
+      } catch {
+        text = '';
+      }
+      if (!text) {
+        try {
+          text = await navigator.clipboard.readText();
+        } catch {
+          text = '';
+        }
+      }
       if (!text) return;
       if (isLargePaste(text, 64)) {
         pendingLargePaste = text;
@@ -180,6 +197,13 @@
   onMount(async () => {
     if (!hostEl) return;
 
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      try {
+        await document.fonts.load(`${fontSize}px "JetBrains Mono Nerd"`);
+        await document.fonts.ready;
+      } catch {}
+    }
+
     const instance = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
@@ -187,7 +211,7 @@
       allowProposedApi: true,
       allowTransparency: true,
       fontFamily:
-        "'JetBrains Mono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        "'JetBrains Mono Nerd', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize,
       lineHeight: 1.35,
       smoothScrollDuration: 0,
@@ -222,6 +246,30 @@
       canvasAddon = null;
     }
 
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(() => {
+        if (!term) return;
+        canvasAddon?.clearTextureAtlas();
+        try {
+          term.refresh(0, Math.max(0, term.rows - 1));
+          fitAddon?.fit();
+        } catch {}
+      }).catch(() => {});
+    }
+
+    handleAuxClick = (ev: MouseEvent) => {
+      if (ev.button === 1) {
+        ev.preventDefault();
+        void handleClipboardPaste('primary');
+      }
+    };
+    handleDomPaste = (ev: ClipboardEvent) => {
+      ev.preventDefault();
+      void handleClipboardPaste('clipboard');
+    };
+    hostEl.addEventListener('auxclick', handleAuxClick);
+    hostEl.addEventListener('paste', handleDomPaste);
+
     instance.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
       if (ev.type !== 'keydown') return true;
 
@@ -237,6 +285,7 @@
       if (disposition === 'copy') {
         const selected = instance.getSelection();
         if (selected) {
+          void clipboardWriteText(selected).catch(() => {});
           void navigator.clipboard.writeText(selected).catch(() => {});
           instance.clearSelection();
         }
@@ -245,7 +294,7 @@
 
       if (disposition === 'paste') {
         ev.preventDefault();
-        void handleClipboardPaste();
+        void handleClipboardPaste('clipboard');
         return false;
       }
 
@@ -336,6 +385,14 @@
     if (resizeTimer !== null) {
       clearTimeout(resizeTimer);
       resizeTimer = null;
+    }
+    if (handleAuxClick && hostEl) {
+      hostEl.removeEventListener('auxclick', handleAuxClick);
+      handleAuxClick = null;
+    }
+    if (handleDomPaste && hostEl) {
+      hostEl.removeEventListener('paste', handleDomPaste);
+      handleDomPaste = null;
     }
     resizeObserver?.disconnect();
     unlistenOutput?.();

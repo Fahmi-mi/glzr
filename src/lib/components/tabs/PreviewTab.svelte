@@ -321,7 +321,7 @@
     background: transparent;
     color: var(--tx);
     box-shadow: none;
-    line-height: 1;
+    line-height: normal;
     text-align: center;
   }
 
