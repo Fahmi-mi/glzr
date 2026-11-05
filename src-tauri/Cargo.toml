@@ -29,7 +29,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 portable-pty = "0.8"
-notify = "7"
+notify = "8"
 tokio = { version = "1", features = ["sync", "process", "rt", "time", "macros"] }
 toml = "0.8"
 trash = "5"
