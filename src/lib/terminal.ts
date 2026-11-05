@@ -17,11 +17,23 @@ export function resolveTerminalKey(input: TerminalKeyInput): TerminalKeyDisposit
     return 'app-shortcut';
   }
 
-  if (input.ctrlKey && input.shiftKey && input.key.toLowerCase() === 'v') {
+  if (
+    (input.ctrlKey && input.shiftKey && input.key.toLowerCase() === 'v') ||
+    (input.shiftKey && !input.ctrlKey && !input.altKey && !input.metaKey && input.key === 'Insert') ||
+    (input.metaKey && !input.ctrlKey && !input.altKey && input.key.toLowerCase() === 'v')
+  ) {
     return 'paste';
   }
 
-  if (input.ctrlKey && !input.shiftKey && !input.altKey && input.key.toLowerCase() === 'c') {
+  if (
+    (input.ctrlKey && input.shiftKey && input.key.toLowerCase() === 'c') ||
+    (input.ctrlKey && !input.shiftKey && !input.altKey && !input.metaKey && input.key === 'Insert') ||
+    (input.metaKey && !input.ctrlKey && !input.altKey && input.key.toLowerCase() === 'c')
+  ) {
+    return 'copy';
+  }
+
+  if (input.ctrlKey && !input.shiftKey && !input.altKey && !input.metaKey && input.key.toLowerCase() === 'c') {
     return input.hasSelection ? 'copy' : 'pass-to-pty';
   }
 

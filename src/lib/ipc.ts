@@ -523,6 +523,14 @@ export async function previewCheckUrl(url: string): Promise<boolean> {
   return callCommand<boolean>('preview_check_url', { url });
 }
 
+export async function clipboardReadText(selection?: 'clipboard' | 'primary'): Promise<string> {
+  return callCommand<string>('clipboard_read_text', { selection });
+}
+
+export async function clipboardWriteText(text: string): Promise<void> {
+  return callCommand<void>('clipboard_write_text', { text });
+}
+
 export async function onBackendEvent<K extends keyof BackendEventMap>(
   event: K,
   handler: (payload: BackendEventMap[K]) => void

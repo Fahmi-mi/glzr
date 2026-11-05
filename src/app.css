@@ -157,7 +157,7 @@ button {
   color: var(--tx);
   font-family: var(--font-ui);
   font-size: 13px;
-  line-height: 1;
+  line-height: normal;
   text-align: center;
   vertical-align: middle;
   cursor: pointer;
@@ -171,7 +171,7 @@ button > span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
+  line-height: normal;
 }
 
 button > svg {
@@ -184,7 +184,7 @@ button > svg {
   align-items: center;
   justify-content: center;
   text-align: center;
-  line-height: 1;
+  line-height: normal;
 }
 
 button:hover:not(:disabled) {

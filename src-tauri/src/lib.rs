@@ -564,6 +564,75 @@ fn preview_check_url(url: String) -> AppResult<bool> {
     check_localhost_reachable(&url)
 }
 
+#[tauri::command]
+async fn clipboard_read_text(selection: Option<String>, app: AppHandle) -> AppResult<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let text = if gtk::is_initialized() {
+                let is_primary = selection.as_deref() == Some("primary");
+                let primary_atom = &gdk::SELECTION_PRIMARY;
+                let clipboard_atom = &gdk::SELECTION_CLIPBOARD;
+                let (first, second) = if is_primary {
+                    (primary_atom, clipboard_atom)
+                } else {
+                    (clipboard_atom, primary_atom)
+                };
+                let mut val = gtk::Clipboard::get(first).wait_for_text().map(|s| s.to_string());
+                if val.as_ref().map_or(true, |s| s.is_empty()) {
+                    if let Some(p) = gtk::Clipboard::get(second).wait_for_text() {
+                        if !p.is_empty() {
+                            val = Some(p.to_string());
+                        }
+                    }
+                }
+                val
+            } else {
+                None
+            };
+            let _ = tx.send(text.unwrap_or_default());
+        })
+        .map_err(|err| AppError::ExternalCommand(err.to_string()))?;
+
+        match tokio::time::timeout(Duration::from_millis(1500), rx).await {
+            Ok(Ok(val)) => Ok(val),
+            _ => Ok(String::new()),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (selection, app);
+        Ok(String::new())
+    }
+}
+
+#[tauri::command]
+async fn clipboard_write_text(text: String, app: AppHandle) -> AppResult<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            if gtk::is_initialized() {
+                let clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
+                clipboard.set_text(&text);
+                let primary = gtk::Clipboard::get(&gdk::SELECTION_PRIMARY);
+                primary.set_text(&text);
+            }
+            let _ = tx.send(());
+        })
+        .map_err(|err| AppError::ExternalCommand(err.to_string()))?;
+
+        let _ = tokio::time::timeout(Duration::from_millis(1500), rx).await;
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (text, app);
+        Ok(())
+    }
+}
+
 fn update_window_title(window: &Window, folder_name: Option<&str>) {
     let title = match folder_name {
         Some(name) if !name.is_empty() => format!("{} - glzr", name),
@@ -663,6 +732,7 @@ pub fn run() {
                         settings.set_hardware_acceleration_policy(
                             webkit2gtk::HardwareAccelerationPolicy::Always,
                         );
+                        settings.set_javascript_can_access_clipboard(true);
                     }
                 });
             }
@@ -731,7 +801,9 @@ pub fn run() {
             settings_save,
             reveal_in_file_manager,
             open_external,
-            preview_check_url
+            preview_check_url,
+            clipboard_read_text,
+            clipboard_write_text
         ]);
 
     if let Err(err) = builder.run(tauri::generate_context!()) {

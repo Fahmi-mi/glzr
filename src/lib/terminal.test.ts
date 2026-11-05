@@ -56,7 +56,7 @@ describe('terminal key handling spike', () => {
     ).toBe('app-shortcut');
   });
 
-  it('triggers paste on Ctrl+Shift+V', () => {
+  it('triggers paste on Ctrl+Shift+V, Shift+Insert, and Meta+V', () => {
     expect(
       resolveTerminalKey({
         key: 'V',
@@ -67,6 +67,63 @@ describe('terminal key handling spike', () => {
         hasSelection: false
       })
     ).toBe('paste');
+
+    expect(
+      resolveTerminalKey({
+        key: 'Insert',
+        ctrlKey: false,
+        shiftKey: true,
+        altKey: false,
+        metaKey: false,
+        hasSelection: false
+      })
+    ).toBe('paste');
+
+    expect(
+      resolveTerminalKey({
+        key: 'v',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: true,
+        hasSelection: false
+      })
+    ).toBe('paste');
+  });
+
+  it('triggers copy on Ctrl+Shift+C, Meta+C, and Ctrl+Insert', () => {
+    expect(
+      resolveTerminalKey({
+        key: 'C',
+        ctrlKey: true,
+        shiftKey: true,
+        altKey: false,
+        metaKey: false,
+        hasSelection: true
+      })
+    ).toBe('copy');
+
+    expect(
+      resolveTerminalKey({
+        key: 'c',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: true,
+        hasSelection: true
+      })
+    ).toBe('copy');
+
+    expect(
+      resolveTerminalKey({
+        key: 'Insert',
+        ctrlKey: true,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        hasSelection: false
+      })
+    ).toBe('copy');
   });
 
   it('checks large paste threshold, font zoom bounds, and localhost links', () => {
