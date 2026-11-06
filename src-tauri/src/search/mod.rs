@@ -67,8 +67,15 @@ impl ActiveSearchHandle {
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
         if let Some(pid) = self.pid {
-            let pid_str = pid.to_string();
-            let _ = Command::new("kill").args(["-TERM", &pid_str]).status();
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(pid as libc::pid_t, libc::SIGTERM);
+            }
+            #[cfg(not(unix))]
+            {
+                let pid_str = pid.to_string();
+                let _ = Command::new("kill").args(["-TERM", &pid_str]).status();
+            }
         }
     }
 }
@@ -251,6 +258,15 @@ pub fn consume_rg_stream<R, D, E>(
         }
     };
 
+    let mut stderr_pipe = child.stderr.take();
+    let stderr_handle = std::thread::spawn(move || {
+        let mut err_buf = String::new();
+        if let Some(mut pipe) = stderr_pipe.take() {
+            let _ = std::io::Read::read_to_string(&mut pipe, &mut err_buf);
+        }
+        err_buf
+    });
+
     let reader = BufReader::new(stdout);
     let mut batch: Vec<SearchMatchDto> = Vec::with_capacity(BATCH_EMIT_SIZE);
     let mut total_count = 0usize;
@@ -261,6 +277,7 @@ pub fn consume_rg_stream<R, D, E>(
         if cancelled.load(Ordering::Relaxed) {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stderr_handle.join();
             return;
         }
 
@@ -289,6 +306,7 @@ pub fn consume_rg_stream<R, D, E>(
     if cancelled.load(Ordering::Relaxed) {
         let _ = child.kill();
         let _ = child.wait();
+        let _ = stderr_handle.join();
         return;
     }
 
@@ -296,18 +314,14 @@ pub fn consume_rg_stream<R, D, E>(
         on_batch(batch);
     }
 
+    let err_buf = stderr_handle.join().unwrap_or_default();
     match child.wait() {
         Ok(status) => {
-            // Exit code 0 = matches found, 1 = no matches, 2 = error (unless killed due to truncation)
             if !truncated && status.code() == Some(2) {
-                if let Some(mut stderr) = child.stderr.take() {
-                    let mut err_buf = String::new();
-                    let _ = std::io::Read::read_to_string(&mut stderr, &mut err_buf);
-                    let msg = err_buf.trim();
-                    if !msg.is_empty() {
-                        on_error(msg.to_string());
-                        return;
-                    }
+                let msg = err_buf.trim();
+                if !msg.is_empty() {
+                    on_error(msg.to_string());
+                    return;
                 }
             }
             on_done(truncated);

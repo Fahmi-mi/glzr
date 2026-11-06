@@ -100,14 +100,39 @@ fn run_git_raw(repo_dir: &Path, args: &[&str], timeout_secs: u64) -> AppResult<O
         }
     })?;
 
+    let mut stdout_pipe = child
+        .stdout
+        .take()
+        .ok_or_else(|| AppError::ExternalCommand("missing git stdout pipe".into()))?;
+    let mut stderr_pipe = child
+        .stderr
+        .take()
+        .ok_or_else(|| AppError::ExternalCommand("missing git stderr pipe".into()))?;
+
+    let stdout_handle = thread::spawn(move || {
+        let mut buf = Vec::new();
+        use std::io::Read;
+        let _ = stdout_pipe.read_to_end(&mut buf);
+        buf
+    });
+
+    let stderr_handle = thread::spawn(move || {
+        let mut buf = Vec::new();
+        use std::io::Read;
+        let _ = stderr_pipe.read_to_end(&mut buf);
+        buf
+    });
+
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
-    loop {
+    let status = loop {
         match child.try_wait()? {
-            Some(_) => return Ok(child.wait_with_output()?),
+            Some(s) => break s,
             None => {
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
+                    let _ = stdout_handle.join();
+                    let _ = stderr_handle.join();
                     return Err(AppError::ExternalCommand(format!(
                         "git command timed out after {} seconds",
                         timeout_secs
@@ -116,7 +141,20 @@ fn run_git_raw(repo_dir: &Path, args: &[&str], timeout_secs: u64) -> AppResult<O
                 thread::sleep(Duration::from_millis(10));
             }
         }
-    }
+    };
+
+    let stdout_bytes = stdout_handle
+        .join()
+        .map_err(|_| AppError::ExternalCommand("git stdout reader panicked".into()))?;
+    let stderr_bytes = stderr_handle
+        .join()
+        .map_err(|_| AppError::ExternalCommand("git stderr reader panicked".into()))?;
+
+    Ok(Output {
+        status,
+        stdout: stdout_bytes,
+        stderr: stderr_bytes,
+    })
 }
 
 fn run_git_checked(repo_dir: &Path, args: &[&str]) -> AppResult<Output> {

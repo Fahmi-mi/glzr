@@ -313,21 +313,26 @@ export function parseQuickOpenInput(raw: string): QuickOpenQuery {
   return { query: trimmed, line: null };
 }
 
-export function fuzzyScore(candidate: string, query: string): number | null {
+export function fuzzyScore(
+  candidate: string,
+  query: string,
+  lowerCandidate?: string,
+  lowerQuery?: string
+): number | null {
   if (!query) {
     return 0;
   }
 
-  const lowerCandidate = candidate.toLowerCase();
-  const lowerQuery = query.toLowerCase();
+  const lCandidate = lowerCandidate ?? candidate.toLowerCase();
+  const lQuery = lowerQuery ?? query.toLowerCase();
 
   let score = 0;
   let qIdx = 0;
   let prevMatchIdx = -2;
-  const fileNameStart = lowerCandidate.lastIndexOf('/') + 1;
+  const fileNameStart = lCandidate.lastIndexOf('/') + 1;
 
-  for (let cIdx = 0; cIdx < lowerCandidate.length && qIdx < lowerQuery.length; cIdx++) {
-    if (lowerCandidate[cIdx] === lowerQuery[qIdx]) {
+  for (let cIdx = 0; cIdx < lCandidate.length && qIdx < lQuery.length; cIdx++) {
+    if (lCandidate[cIdx] === lQuery[qIdx]) {
       score += 10;
       if (cIdx === prevMatchIdx + 1) {
         score += 15;
@@ -335,7 +340,7 @@ export function fuzzyScore(candidate: string, query: string): number | null {
       if (cIdx >= fileNameStart) {
         score += 8;
       }
-      if (cIdx === 0 || cIdx === fileNameStart || '/._-'.includes(lowerCandidate[cIdx - 1])) {
+      if (cIdx === 0 || cIdx === fileNameStart || '/._-'.includes(lCandidate[cIdx - 1])) {
         score += 12;
       }
       prevMatchIdx = cIdx;
@@ -343,27 +348,41 @@ export function fuzzyScore(candidate: string, query: string): number | null {
     }
   }
 
-  if (qIdx < lowerQuery.length) {
+  if (qIdx < lQuery.length) {
     return null;
   }
 
   return score - candidate.length * 0.1;
 }
 
-export function fuzzyFilterFiles(files: readonly string[], query: string, limit = 50): string[] {
+export function fuzzyFilterFiles(
+  files: readonly string[] | readonly { path: string; lower: string }[],
+  query: string,
+  limit = 50
+): string[] {
   const trimmed = query.trim();
   if (!trimmed) {
-    return files.slice(0, limit);
+    if (files.length === 0) return [];
+    if (typeof files[0] === 'string') {
+      return (files as readonly string[]).slice(0, limit);
+    }
+    return (files as readonly { path: string; lower: string }[])
+      .slice(0, limit)
+      .map((f) => f.path);
   }
 
+  const lowerQuery = trimmed.toLowerCase();
   const scored: Array<{ path: string; score: number }> = [];
-  for (const path of files) {
-    const score = fuzzyScore(path, trimmed);
+  for (let i = 0; i < files.length; i++) {
+    const item = files[i];
+    const path = typeof item === 'string' ? item : item.path;
+    const lower = typeof item === 'string' ? undefined : item.lower;
+    const score = fuzzyScore(path, trimmed, lower, lowerQuery);
     if (score !== null) {
       scored.push({ path, score });
     }
   }
 
-  scored.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  scored.sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return scored.slice(0, limit).map((item) => item.path);
 }

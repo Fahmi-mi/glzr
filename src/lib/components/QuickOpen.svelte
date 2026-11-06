@@ -14,7 +14,7 @@
   let { open, workspaceRoot, onClose, onSelect }: Props = $props();
 
   let queryInput = $state('');
-  let allFiles = $state<string[]>([]);
+  let allFiles = $state<Array<{ path: string; lower: string }>>([]);
   let selectedIndex = $state(0);
   let loading = $state(false);
   let inputEl = $state<HTMLInputElement | null>(null);
@@ -42,7 +42,8 @@
   async function refreshFileList() {
     loading = true;
     try {
-      allFiles = await fsListWorkspaceFiles();
+      const raw = await fsListWorkspaceFiles();
+      allFiles = raw.map((path) => ({ path, lower: path.toLowerCase() }));
     } catch {
       allFiles = [];
     } finally {
