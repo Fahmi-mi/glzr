@@ -21,11 +21,11 @@
     radial-gradient(700px 420px at 12% 8%, rgba(94, 129, 255, 0.45) 0, transparent 70%),
     radial-gradient(640px 420px at 92% 88%, rgba(45, 212, 191, 0.3) 0, transparent 70%), #0e0f13;
   --pbg: #14151a;
-  --pblur: blur(16px) saturate(140%);
+  --pblur: blur(12px) saturate(140%);
   --cbg: rgba(24, 25, 31, 0.55);
-  --cblur: blur(24px) saturate(160%);
+  --cblur: blur(12px) saturate(160%);
   --pop-bg: rgba(20, 21, 26, 0.92);
-  --pop-blur: blur(28px) saturate(180%);
+  --pop-blur: blur(14px) saturate(180%);
   --backdrop-bg: rgba(8, 9, 14, 0.45);
   --backdrop-blur: blur(12px) saturate(140%);
   --pn: #14151a;
@@ -84,11 +84,11 @@
     radial-gradient(600px 420px at 95% 15%, #c9d8ff 0, transparent 65%),
     radial-gradient(700px 400px at 50% 110%, #e3c9ff 0, transparent 65%), #f3f1f8;
   --pbg: #f7f6fb;
-  --pblur: blur(20px) saturate(160%);
+  --pblur: blur(12px) saturate(160%);
   --cbg: rgba(255, 255, 255, 0.55);
-  --cblur: blur(24px) saturate(160%);
+  --cblur: blur(12px) saturate(160%);
   --pop-bg: rgba(255, 255, 255, 0.9);
-  --pop-blur: blur(28px) saturate(180%);
+  --pop-blur: blur(14px) saturate(180%);
   --backdrop-bg: rgba(15, 23, 42, 0.28);
   --backdrop-blur: blur(12px) saturate(140%);
   --pn: #f7f6fb;

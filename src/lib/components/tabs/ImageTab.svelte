@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { fsReadImageDataUrl, type AppErrorPayload } from '$lib/ipc';
+  import { convertFileSrc } from '@tauri-apps/api/core';
 
   interface Props {
     path: string;
@@ -9,7 +9,7 @@
 
   let { path, sizeBytes = 0 }: Props = $props();
 
-  let dataUrl = $state<string | null>(null);
+  let imageSrc = $state<string | null>(null);
   let errorMsg = $state<string | null>(null);
   let loading = $state(true);
   let naturalWidth = $state(0);
@@ -21,24 +21,33 @@
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  async function loadImage(targetPath: string) {
+  function resolveSrc(targetPath: string) {
     loading = true;
     errorMsg = null;
-    dataUrl = null;
     naturalWidth = 0;
     naturalHeight = 0;
+    if (!targetPath || !targetPath.trim()) {
+      loading = false;
+      errorMsg = 'Failed to load image';
+      imageSrc = null;
+      return;
+    }
     try {
-      dataUrl = await fsReadImageDataUrl(targetPath);
-    } catch (err) {
-      const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Failed to load image';
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.convertFileSrc) {
+        imageSrc = convertFileSrc(targetPath);
+      } else {
+        imageSrc = targetPath;
+      }
+    } catch {
+      errorMsg = 'Failed to load image';
+      imageSrc = null;
     } finally {
       loading = false;
     }
   }
 
   $effect(() => {
-    void loadImage(path);
+    resolveSrc(path);
   });
 
   function handleImageLoad(event: Event) {
@@ -47,8 +56,12 @@
     naturalHeight = img.naturalHeight;
   }
 
+  function handleImageError() {
+    errorMsg = 'Failed to load image';
+  }
+
   onDestroy(() => {
-    dataUrl = null;
+    imageSrc = null;
   });
 </script>
 
@@ -57,9 +70,9 @@
     <p class="muted">Loading image...</p>
   {:else if errorMsg}
     <p class="error-text">{errorMsg}</p>
-  {:else if dataUrl}
+  {:else if imageSrc}
     <div class="image-stage">
-      <img src={dataUrl} alt={path} onload={handleImageLoad} class="preview-image" />
+      <img src={imageSrc} alt={path} onload={handleImageLoad} onerror={handleImageError} class="preview-image" />
     </div>
     <div class="image-meta">
       {#if naturalWidth > 0 && naturalHeight > 0}

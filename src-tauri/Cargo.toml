@@ -18,7 +18,7 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+tauri = { version = "2", features = ["devtools", "protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-cli = "2"
 tauri-plugin-single-instance = "2"
@@ -47,7 +47,7 @@ tempfile = "3"
 
 [profile.release]
 opt-level = "s"
-lto = "thin"
-codegen-units = 4
+lto = true
+codegen-units = 1
 strip = true
 panic = "abort"

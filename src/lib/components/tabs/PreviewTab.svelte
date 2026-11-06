@@ -33,7 +33,34 @@
   let urlInputEl = $state<HTMLInputElement | null>(null);
   let lastSyncedPropUrl = $state('');
 
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function clearPoll() {
+    if (pollTimeout !== null) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
+    }
+  }
+
+  function scheduleNextPoll(targetUrl: string, isOnline: boolean | null) {
+    clearPoll();
+    if (!visible) return;
+    const delay = isOnline === true ? 15000 : 3000;
+    pollTimeout = setTimeout(async () => {
+      if (!checkingServer && visible) {
+        try {
+          const ok = await previewCheckUrl(targetUrl);
+          serverOnline = ok;
+          scheduleNextPoll(targetUrl, ok);
+        } catch {
+          serverOnline = false;
+          scheduleNextPoll(targetUrl, false);
+        }
+      } else if (visible) {
+        scheduleNextPoll(targetUrl, serverOnline);
+      }
+    }, delay);
+  }
 
   const currentUrl = $derived(history.entries[history.index] ?? 'http://localhost:5173/');
   const canGoBack = $derived(history.index > 0);
@@ -75,45 +102,28 @@
       }
       urlInput = formatPreviewDisplayUrl(normalized);
       validationError = null;
-      void verifyReachability(normalized);
+      void verifyReachability(normalized).then(() => {
+        scheduleNextPoll(normalized, serverOnline);
+      });
     }
   });
 
   $effect(() => {
-    if (pollTimer !== null) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-
+    clearPoll();
     if (visible) {
       const activeTarget = currentUrl;
-      void verifyReachability(activeTarget);
-      pollTimer = setInterval(() => {
-        if (!checkingServer) {
-          void previewCheckUrl(activeTarget)
-            .then((ok) => {
-              serverOnline = ok;
-            })
-            .catch(() => {
-              serverOnline = false;
-            });
-        }
-      }, 3000);
+      void verifyReachability(activeTarget).then(() => {
+        scheduleNextPoll(activeTarget, serverOnline);
+      });
     }
 
     return () => {
-      if (pollTimer !== null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
+      clearPoll();
     };
   });
 
   onDestroy(() => {
-    if (pollTimer !== null) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
+    clearPoll();
   });
 
   function applyNavigation(targetUrl: string) {
@@ -121,7 +131,9 @@
     validationError = null;
     lastSyncedPropUrl = targetUrl;
     onUrlChange?.(targetUrl, formatPreviewTabTitle(targetUrl));
-    void verifyReachability(targetUrl);
+    void verifyReachability(targetUrl).then(() => {
+      scheduleNextPoll(targetUrl, serverOnline);
+    });
   }
 
   function handleUrlSubmit() {
@@ -144,7 +156,9 @@
 
   export function reloadPreview() {
     reloadCounter += 1;
-    void verifyReachability(currentUrl);
+    void verifyReachability(currentUrl).then(() => {
+      scheduleNextPoll(currentUrl, serverOnline);
+    });
   }
 
   export function focusUrlBar() {
