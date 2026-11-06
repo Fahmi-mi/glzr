@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import ExternalLink from '@lucide/svelte/icons/external-link';
-  import { EditorSelection, EditorState, Compartment, Prec } from '@codemirror/state';
+  import { EditorSelection, EditorState, Compartment, Prec, type Text } from '@codemirror/state';
   import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view';
   import {
     defaultKeymap,
@@ -74,6 +74,8 @@
   let svgMode = $state<'preview' | 'code'>('preview');
   let isDirty = $state(false);
   let savedContent = $state('');
+  let savedDocLength = $state(0);
+  let savedDoc = $state<Text | null>(null);
   let lastKnownMtimeMs = $state(0);
   let cursorLine = 1;
   let cursorCol = 1;
@@ -316,9 +318,12 @@
     }
   }
 
-  function scheduleDraftSave(targetPath: string, content: string) {
+  function scheduleDraftSave(targetPath: string) {
     clearDraftTimer();
     draftTimer = setTimeout(() => {
+      draftTimer = null;
+      if (!editorView) return;
+      const content = editorView.state.doc.toString();
       void fsSaveDraft(targetPath, content).catch(() => {});
     }, 5000);
   }
@@ -382,6 +387,8 @@
       const writeRes = await fsWriteFile(path, content, fileData.encoding, fileData.lineEnding);
       lastKnownMtimeMs = writeRes.mtimeMs;
       savedContent = content;
+      savedDoc = editorView.state.doc;
+      savedDocLength = content.length;
       externalConflict = null;
       isDirty = false;
       onDirtyChange?.(false);
@@ -429,14 +436,16 @@
 
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        const current = update.state.doc.toString();
-        const dirtyNow = current !== savedContent;
+        const doc = update.state.doc;
+        const dirtyNow =
+          doc.length !== savedDocLength ||
+          (savedDoc ? !doc.eq(savedDoc) : doc.toString() !== savedContent);
         if (dirtyNow !== isDirty) {
           isDirty = dirtyNow;
           onDirtyChange?.(dirtyNow);
         }
         if (dirtyNow) {
-          scheduleDraftSave(path, current);
+          scheduleDraftSave(path);
         } else {
           clearDraftTimer();
         }
@@ -492,9 +501,10 @@
       parent: host
     });
 
-    smoothScrollCleanup = attachSmoothScroll(editorView.scrollDOM, {
-      onScrollActivity: pauseHeavyDecorations
-    });
+    savedDoc = editorView.state.doc;
+    savedDocLength = editorView.state.doc.length;
+
+    smoothScrollCleanup = attachSmoothScroll(editorView.scrollDOM);
 
     if (targetLine && targetLine > 0) {
       jumpToLine(editorView, targetLine);
@@ -613,6 +623,8 @@
         },
         selection: EditorSelection.cursor(clampedHead)
       });
+      savedDoc = editorView.state.doc;
+      savedDocLength = editorView.state.doc.length;
     }
   }
 

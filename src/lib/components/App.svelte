@@ -157,25 +157,55 @@
     return `${prefix}-${Date.now().toString(36)}-${idSeq}`;
   }
 
-  function scheduleSessionSave() {
+  let draggingSplitter = $state(false);
+
+  function commitSessionSave() {
     if (!sessionReady || !projectState.activeFolder) return;
     if (saveSessionTimer !== null) {
       clearTimeout(saveSessionTimer);
+      saveSessionTimer = null;
     }
     const snapshot = JSON.stringify({
       ...session,
       folder: projectState.activeFolder
     });
+    void sessionSave(snapshot).catch(() => {});
+  }
+
+  function scheduleSessionSave() {
+    if (!sessionReady || !projectState.activeFolder) return;
+    if (draggingSidebar || draggingSplitter) return;
+    if (saveSessionTimer !== null) {
+      clearTimeout(saveSessionTimer);
+    }
     saveSessionTimer = setTimeout(() => {
-      void sessionSave(snapshot).catch(() => {});
+      saveSessionTimer = null;
+      commitSessionSave();
     }, 400);
   }
 
   $effect(() => {
     if (sessionReady && projectState.activeFolder) {
+      if (draggingSidebar || draggingSplitter) return;
       void JSON.stringify(session);
       scheduleSessionSave();
     }
+  });
+
+  $effect(() => {
+    const handleDragStart = () => {
+      draggingSplitter = true;
+    };
+    const handleCommit = () => {
+      draggingSplitter = false;
+      commitSessionSave();
+    };
+    window.addEventListener('glzr:drag-start', handleDragStart);
+    window.addEventListener('glzr:commit-session', handleCommit);
+    return () => {
+      window.removeEventListener('glzr:drag-start', handleDragStart);
+      window.removeEventListener('glzr:commit-session', handleCommit);
+    };
   });
 
   $effect(() => {
@@ -246,6 +276,7 @@
 
     function handleUp() {
       draggingSidebar = false;
+      commitSessionSave();
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     }
@@ -727,6 +758,7 @@
     }
 
     workspaceModal.open = false;
+    commitSessionSave();
   }
 
   function closeWorkspaceModal() {
@@ -758,6 +790,7 @@
       const nextIdx = Math.min(idx, session.workspaces.length - 1);
       session.activeWorkspaceId = session.workspaces[nextIdx].id;
     }
+    commitSessionSave();
   }
 
   function handleGlobalKeydown(event: KeyboardEvent) {

@@ -77,6 +77,32 @@ export function attachSmoothScroll(
   let lastTrackpadTime = 0;
   const tau = options?.tauMs ?? 20;
 
+  let maxScrollTop = 0;
+  let maxScrollLeft = 0;
+  let cachedClientHeight = 0;
+  let cachedClientWidth = 0;
+
+  function updateDimensions() {
+    cachedClientHeight = node.clientHeight;
+    cachedClientWidth = node.clientWidth;
+    maxScrollTop = Math.max(0, node.scrollHeight - cachedClientHeight);
+    maxScrollLeft = Math.max(0, node.scrollWidth - cachedClientWidth);
+  }
+
+  updateDimensions();
+
+  let resizeObserver: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateDimensions();
+    });
+    try {
+      resizeObserver.observe(node);
+    } catch {
+      resizeObserver = null;
+    }
+  }
+
   function stopKineticScroll() {
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
@@ -92,34 +118,23 @@ export function attachSmoothScroll(
     const dt = Math.max(1, Math.min(32, now - lastTime));
     lastTime = now;
 
-    const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
-    const maxScrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
-
     targetY = clampScroll(targetY, maxScrollTop);
     targetX = clampScroll(targetX, maxScrollLeft);
 
-    const currentY = node.scrollTop;
-    const currentX = node.scrollLeft;
+    const currentY = expectedScrollTop;
+    const currentX = expectedScrollLeft;
 
     const resY = computeScrollStep(currentY, targetY, dt, tau);
     const resX = computeScrollStep(currentX, targetX, dt, tau);
 
     node.scrollTop = resY.next;
     node.scrollLeft = resX.next;
-    expectedScrollTop = node.scrollTop;
-    expectedScrollLeft = node.scrollLeft;
+    expectedScrollTop = resY.next;
+    expectedScrollLeft = resX.next;
 
     options?.onScrollActivity?.();
 
     if (resY.done && resX.done) {
-      rafId = null;
-      return;
-    }
-
-    if (
-      (resY.done || Math.abs(node.scrollTop - currentY) < 0.1) &&
-      (resX.done || Math.abs(node.scrollLeft - currentX) < 0.1)
-    ) {
       rafId = null;
       return;
     }
@@ -141,8 +156,12 @@ export function attachSmoothScroll(
       return;
     }
 
-    const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
-    const maxScrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
+    if (rafId === null) {
+      updateDimensions();
+      expectedScrollTop = node.scrollTop;
+      expectedScrollLeft = node.scrollLeft;
+    }
+
     if (maxScrollTop === 0 && maxScrollLeft === 0) {
       return;
     }
@@ -153,8 +172,8 @@ export function attachSmoothScroll(
     const { dy, dx } = resolveDeltaPixels(
       event,
       24,
-      node.clientHeight,
-      node.clientWidth
+      cachedClientHeight || node.clientHeight,
+      cachedClientWidth || node.clientWidth
     );
 
     if (rafId === null) {
@@ -208,6 +227,10 @@ export function attachSmoothScroll(
   return {
     destroy() {
       stopKineticScroll();
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
       node.removeEventListener('wheel', handleWheel);
       node.removeEventListener('scroll', handleNativeScroll);
       node.removeEventListener('pointerdown', handlePointerDown);

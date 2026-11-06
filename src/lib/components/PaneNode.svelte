@@ -94,12 +94,13 @@
     if (node.type !== 'split' || !splitContainerEl) return;
     event.preventDefault();
     draggingSplitter = true;
+    window.dispatchEvent(new CustomEvent('glzr:drag-start'));
 
     const direction = node.direction;
     const container = splitContainerEl;
+    const rect = container.getBoundingClientRect();
 
     function handleMouseMove(moveEvent: MouseEvent) {
-      const rect = container.getBoundingClientRect();
       if (direction === 'row') {
         if (rect.width <= 0) return;
         const nextRatio = (moveEvent.clientX - rect.left) / rect.width;
@@ -115,6 +116,7 @@
       draggingSplitter = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.dispatchEvent(new CustomEvent('glzr:commit-session'));
     }
 
     window.addEventListener('mousemove', handleMouseMove);
