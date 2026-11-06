@@ -30,6 +30,14 @@
   let confirmingDiscardHunk = $state<number | null>(null);
   let busyHunk = $state<number | null>(null);
 
+  const memoizedHunks = $derived.by(() => {
+    if (!diffData?.fileDiff?.hunks) return [];
+    return diffData.fileDiff.hunks.map((hunk) => ({
+      hunk,
+      lines: parseHunkLines(hunk)
+    }));
+  });
+
   $effect(() => {
     stagedMode = initialStaged;
   });
@@ -153,8 +161,7 @@
       </div>
     {:else}
       <div class="hunk-list">
-        {#each diffData.fileDiff.hunks as hunk (hunk.index)}
-          {@const lines = parseHunkLines(hunk)}
+        {#each memoizedHunks as { hunk, lines } (hunk.index)}
           <section class="hunk-card">
             <header class="hunk-header">
               <span class="hunk-range mono">{hunk.header}</span>
@@ -202,25 +209,40 @@
               </div>
             </header>
 
-            <div class="hunk-lines">
-              {#each lines as line, lineIdx (lineIdx)}
-                <button
-                  class="diff-line {line.kind}"
-                  onclick={() => {
-                    const target = line.newLine ?? line.oldLine;
-                    if (target !== null) {
-                      onOpenFile?.(relPath, target);
-                    }
-                  }}
-                >
-                  <span class="gutter-num">{line.oldLine ?? ''}</span>
-                  <span class="gutter-num">{line.newLine ?? ''}</span>
-                  <span class="line-prefix">
-                    {line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '}
-                  </span>
-                  <span class="line-code">{line.text}</span>
-                </button>
-              {/each}
+            <div class="hunk-content">
+              <div class="hunk-lines">
+                {#each lines as line, lineIdx (lineIdx)}
+                  <div
+                    class="diff-line {line.kind}"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => {
+                      const sel = typeof window !== 'undefined' ? window.getSelection()?.toString() : '';
+                      if (sel && sel.length > 0) return;
+                      const target = line.newLine ?? line.oldLine;
+                      if (target !== null) {
+                        onOpenFile?.(relPath, target);
+                      }
+                    }}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const target = line.newLine ?? line.oldLine;
+                        if (target !== null) {
+                          onOpenFile?.(relPath, target);
+                        }
+                      }
+                    }}
+                  >
+                    <span class="gutter-num gutter-old">{line.oldLine ?? ''}</span>
+                    <span class="gutter-num gutter-new">{line.newLine ?? ''}</span>
+                    <span class="line-prefix">
+                      {line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '}
+                    </span>
+                    <span class="line-code">{line.text}</span>
+                  </div>
+                {/each}
+              </div>
             </div>
           </section>
         {/each}
@@ -328,6 +350,8 @@
     border-radius: var(--radius-menu);
     overflow: hidden;
     background: var(--el);
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
   }
 
   .hunk-header {
@@ -355,9 +379,17 @@
     gap: 6px;
   }
 
+  .hunk-content {
+    overflow-x: auto;
+    width: 100%;
+    overscroll-behavior-x: contain;
+  }
+
   .hunk-lines {
     display: flex;
     flex-direction: column;
+    min-width: 100%;
+    width: max-content;
     background: transparent;
   }
 
@@ -365,7 +397,7 @@
     width: 100%;
     min-height: 24px;
     height: auto;
-    padding: 2px 12px;
+    padding: 0;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -374,13 +406,20 @@
     font-size: var(--font-size-code);
     line-height: 1.65;
     display: grid;
-    grid-template-columns: 40px 40px 18px 1fr;
-    align-items: start;
+    grid-template-columns: 46px 46px 20px 1fr;
+    align-items: stretch;
     text-align: left;
+    cursor: pointer;
+    user-select: text;
   }
 
   .diff-line:hover {
     filter: brightness(1.08);
+  }
+
+  .diff-line:focus-visible {
+    outline: 1px solid var(--ac);
+    outline-offset: -1px;
   }
 
   .diff-line.add {
@@ -396,24 +435,46 @@
   .diff-line.meta {
     color: var(--dm);
     font-style: italic;
+    cursor: default;
+  }
+
+  .diff-line.meta:hover {
+    filter: none;
   }
 
   .gutter-num {
-    color: var(--ft);
     font-size: 11px;
     text-align: right;
-    padding-right: 8px;
+    padding: 2px 6px;
     user-select: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gutter-old {
+    color: var(--dm);
+    border-right: 1px solid var(--bd);
+  }
+
+  .gutter-new {
+    color: var(--ft);
+    border-right: 1px solid var(--bd);
   }
 
   .line-prefix {
     user-select: none;
     color: inherit;
+    text-align: center;
+    padding: 2px 0;
+    font-weight: 600;
   }
 
   .line-code {
-    white-space: pre-wrap;
-    word-break: break-all;
+    display: block;
+    text-align: left;
+    white-space: pre;
+    tab-size: 2;
+    min-height: 1.65em;
+    padding: 2px 12px 2px 8px;
   }
 
   .mono {
