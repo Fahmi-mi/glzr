@@ -17,8 +17,10 @@
     gitPull,
     gitPush,
     gitStage,
+    gitStageAll,
     gitStatus,
     gitUnstage,
+    gitUnstageAll,
     type AppErrorPayload,
     type GitBranchesDto,
     type GitFileEntry,
@@ -63,6 +65,26 @@
 
   export function focusInput() {
     commitInputEl?.focus();
+  }
+
+  export function hasCommitInput(): boolean {
+    return commitInputEl !== null;
+  }
+
+  export function isCommitFocused(): boolean {
+    return typeof document !== 'undefined' && document.activeElement === commitInputEl;
+  }
+
+  export async function stageAll() {
+    await runAction(async () => {
+      await gitStageAll();
+    });
+  }
+
+  export async function unstageAll() {
+    await runAction(async () => {
+      await gitUnstageAll();
+    });
   }
 
   export async function refresh() {
@@ -383,7 +405,20 @@
       {/if}
 
       <div class="group-section">
-        <div class="group-title">Staged Changes ({statusData.staged.length})</div>
+        <div class="group-header">
+          <div class="group-title">Staged Changes ({statusData.staged.length})</div>
+          {#if statusData.staged.length > 0}
+            <button
+              class="group-action-btn"
+              title="Unstage all changes"
+              aria-label="Unstage all changes"
+              disabled={busy}
+              onclick={unstageAll}
+            >
+              <Minus size={12} strokeWidth={2} />
+            </button>
+          {/if}
+        </div>
         {#if statusData.staged.length === 0}
           <div class="group-empty">No staged changes</div>
         {:else}
@@ -410,7 +445,20 @@
       </div>
 
       <div class="group-section">
-        <div class="group-title">Changes ({unstagedAll.length})</div>
+        <div class="group-header">
+          <div class="group-title">Changes ({unstagedAll.length})</div>
+          {#if unstagedAll.length > 0}
+            <button
+              class="group-action-btn"
+              title="Stage all changes"
+              aria-label="Stage all changes"
+              disabled={busy}
+              onclick={stageAll}
+            >
+              <Plus size={12} strokeWidth={2} />
+            </button>
+          {/if}
+        </div>
         {#if unstagedAll.length === 0}
           <div class="group-empty">No changes</div>
         {:else}
@@ -746,11 +794,42 @@
     gap: 2px;
   }
 
+  .group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 2px;
+  }
+
   .group-title {
     padding: 2px 6px;
     font-size: var(--font-size-ui, 13px);
     font-weight: 500;
     color: var(--dm);
+  }
+
+  .group-action-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--dm);
+    border-radius: var(--radius-ctrl);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .group-action-btn:hover:not(:disabled) {
+    background: var(--el);
+    color: var(--tx);
+  }
+
+  .group-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .group-empty {

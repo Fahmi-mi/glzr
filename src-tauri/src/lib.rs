@@ -279,9 +279,21 @@ fn git_stage(path: String, state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command]
+fn git_stage_all(state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::stage_all(&root)
+}
+
+#[tauri::command]
 fn git_unstage(path: String, state: State<'_, AppState>) -> AppResult<()> {
     let root = state.active_folder_path()?;
     git::unstage_file(&root, &path)
+}
+
+#[tauri::command]
+fn git_unstage_all(state: State<'_, AppState>) -> AppResult<()> {
+    let root = state.active_folder_path()?;
+    git::unstage_all(&root)
 }
 
 #[tauri::command]
@@ -781,7 +793,9 @@ pub fn run() {
             git_diff,
             git_hunks,
             git_stage,
+            git_stage_all,
             git_unstage,
+            git_unstage_all,
             git_discard,
             git_stage_hunk,
             git_unstage_hunk,

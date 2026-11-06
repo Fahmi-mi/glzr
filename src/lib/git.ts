@@ -1,4 +1,4 @@
-import type { DiffHunkDto, GitBadge } from '$lib/ipc';
+import type { DiffHunkDto, GitBadge, GitStatusDto } from '$lib/ipc';
 
 export interface ParsedDiffLine {
   kind: 'add' | 'del' | 'ctx' | 'meta';
@@ -77,3 +77,21 @@ export function badgeColorVar(badge: GitBadge): string {
       return 'var(--mo)';
   }
 }
+
+export function deriveUnstagedFolderPaths(status: GitStatusDto | null): Set<string> {
+  const dirty = new Set<string>();
+  if (!status?.isRepo) return dirty;
+  const entries = [...status.unstaged, ...status.untracked, ...status.conflicted];
+  for (const entry of entries) {
+    const clean = entry.path.replace(/\\/g, '/').replace(/^\/+/, '');
+    const parts = clean.split('/').filter(Boolean);
+    parts.pop();
+    let acc = '';
+    for (const part of parts) {
+      acc = acc ? `${acc}/${part}` : part;
+      dirty.add(acc);
+    }
+  }
+  return dirty;
+}
+

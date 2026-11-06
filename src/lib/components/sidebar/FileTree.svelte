@@ -29,6 +29,7 @@
   interface Props {
     workspaceRoot: string;
     gitBadges?: Record<string, GitBadge>;
+    gitDirtyFolders?: Set<string>;
     onOpenFile: (fullPath: string) => void;
     onEntryRenamed?: (oldPath: string, newPath: string) => void;
     onEntryDeleted?: (deletedPath: string) => void;
@@ -37,6 +38,7 @@
   let {
     workspaceRoot,
     gitBadges = {},
+    gitDirtyFolders = new Set<string>(),
     onOpenFile,
     onEntryRenamed,
     onEntryDeleted
@@ -392,9 +394,12 @@
     {:else}
       {#each flatRows as row (row.entry.path)}
         {@const badge = gitBadges[row.entry.relPath]}
+        {@const cleanRel = row.entry.relPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '')}
+        {@const isDirtyFolder = row.entry.isDir && gitDirtyFolders.has(cleanRel)}
         <div
           class="tree-row"
           class:selected={selectedPath === row.entry.path}
+          class:has-unstaged-changes={isDirtyFolder}
           style:padding-left="{8 + row.depth * 14}px"
           role="treeitem"
           aria-selected={selectedPath === row.entry.path}
@@ -605,6 +610,15 @@
 
   .tree-row.selected {
     background: var(--acs);
+  }
+
+  .tree-row.has-unstaged-changes .row-main {
+    color: var(--mo);
+  }
+
+  .tree-row.has-unstaged-changes .row-main :global(svg),
+  .tree-row.has-unstaged-changes .entry-name {
+    color: var(--mo);
   }
 
   .row-main {

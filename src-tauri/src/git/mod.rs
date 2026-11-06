@@ -368,6 +368,30 @@ pub fn unstage_file(repo_dir: &Path, rel_path: &str) -> AppResult<()> {
     Ok(())
 }
 
+pub fn stage_all(repo_dir: &Path) -> AppResult<()> {
+    run_git_checked(repo_dir, &["add", "-A"])?;
+    Ok(())
+}
+
+pub fn unstage_all(repo_dir: &Path) -> AppResult<()> {
+    let has_head = run_git_raw(repo_dir, &["rev-parse", "--verify", "HEAD"], 5)
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if has_head {
+        run_git_checked(repo_dir, &["reset", "HEAD", "--", "."])?;
+    } else {
+        let output = run_git_raw(repo_dir, &["rm", "--cached", "-r", "-f", "--", "."], 30)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !stderr.contains("did not match any files") {
+                return Err(AppError::ExternalCommand(stderr.trim().to_string()));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn save_discard_backup(
     cache_dir: &Path,
     rel_str: &str,
@@ -671,4 +695,48 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn stage_all_and_unstage_all_workflow() -> AppResult<()> {
+        let tmp = TempDir::new()?;
+        let repo = tmp.path().join("repo");
+        fs::create_dir_all(&repo)?;
+        init_repo(&repo)?;
+
+        fs::write(repo.join("file1.txt"), "content 1\n")?;
+        fs::write(repo.join("file2.txt"), "content 2\n")?;
+
+        let st_init = status(&repo)?;
+        assert_eq!(st_init.untracked.len(), 2);
+        assert_eq!(st_init.staged.len(), 0);
+
+        stage_all(&repo)?;
+        let st_staged = status(&repo)?;
+        assert_eq!(st_staged.untracked.len(), 0);
+        assert_eq!(st_staged.staged.len(), 2);
+
+        unstage_all(&repo)?;
+        let st_unstaged = status(&repo)?;
+        assert_eq!(st_unstaged.untracked.len(), 2);
+        assert_eq!(st_unstaged.staged.len(), 0);
+
+        stage_all(&repo)?;
+        commit(&repo, "initial commit")?;
+
+        fs::write(repo.join("file1.txt"), "content 1 changed\n")?;
+        fs::write(repo.join("file3.txt"), "content 3\n")?;
+
+        stage_all(&repo)?;
+        let st_after_stage = status(&repo)?;
+        assert_eq!(st_after_stage.staged.len(), 2);
+
+        unstage_all(&repo)?;
+        let st_after_unstage = status(&repo)?;
+        assert_eq!(st_after_unstage.staged.len(), 0);
+        assert_eq!(st_after_unstage.unstaged.len(), 1);
+        assert_eq!(st_after_unstage.untracked.len(), 1);
+
+        Ok(())
+    }
 }
+

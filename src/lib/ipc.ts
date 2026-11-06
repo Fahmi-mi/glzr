@@ -431,8 +431,16 @@ export async function gitStage(path: string): Promise<void> {
   return callCommand<void>('git_stage', { path });
 }
 
+export async function gitStageAll(): Promise<void> {
+  return callCommand<void>('git_stage_all');
+}
+
 export async function gitUnstage(path: string): Promise<void> {
   return callCommand<void>('git_unstage', { path });
+}
+
+export async function gitUnstageAll(): Promise<void> {
+  return callCommand<void>('git_unstage_all');
 }
 
 export async function gitDiscard(path: string): Promise<void> {

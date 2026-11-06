@@ -1,35 +1,16 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import '@xterm/xterm/css/xterm.css';
-  import { Terminal } from '@xterm/xterm';
-  import { FitAddon } from '@xterm/addon-fit';
-  import { SearchAddon } from '@xterm/addon-search';
-  import { Unicode11Addon } from '@xterm/addon-unicode11';
-  import { WebLinksAddon } from '@xterm/addon-web-links';
-  import { CanvasAddon } from '@xterm/addon-canvas';
   import Globe from '@lucide/svelte/icons/globe';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
-  import {
-    clipboardReadText,
-    clipboardWriteText,
-    onBackendEvent,
-    openExternal,
-    ptyKill,
-    ptyResize,
-    ptySpawn,
-    ptyWrite,
-    type AppErrorPayload
-  } from '$lib/ipc';
+  import { ptyResize } from '$lib/ipc';
   import { formatPreviewTabTitle } from '$lib/preview';
   import {
-    clampTerminalFontSize,
-    extractLocalhostUrl,
-    getTerminalTheme,
-    isLargePaste,
-    resolveTerminalKey
-  } from '$lib/terminal';
+    getOrCreateTerminalSession,
+    type RegisteredTerminalSession,
+    type TerminalSessionDelegate
+  } from '$lib/terminalRegistry';
 
   interface Props {
     sessionId: string;
@@ -40,343 +21,145 @@
 
   let { sessionId, visible = true, theme = 'dark', onOpenLocalhost }: Props = $props();
 
-  function generateSessionToken(): string {
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  }
-
-  function buildXtermTheme(mode: 'dark' | 'light') {
-    const base = getTerminalTheme(mode);
-    return {
-      ...base,
-      background: 'rgba(0, 0, 0, 0)'
-    };
-  }
-
-  let activeSessionId = $state(`${sessionId}:${generateSessionToken()}`);
-  let restarting = $state(false);
   let hostEl = $state<HTMLDivElement | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let searchOpen = $state(false);
   let searchQuery = $state('');
+  let pendingLargePaste = $state<string | null>(null);
+
+  let session = $state<RegisteredTerminalSession | null>(null);
   let exited = $state(false);
   let exitCode = $state<number | null>(null);
   let errorMsg = $state<string | null>(null);
-  let pendingLargePaste = $state<string | null>(null);
   let detectedLocalUrl = $state<string | null>(null);
-  let fontSize = $state(14);
+  let restarting = $state(false);
 
-  let term = $state<Terminal | null>(null);
-  let canvasAddon = $state<CanvasAddon | null>(null);
-  let fitAddon: FitAddon | null = null;
-  let searchAddon: SearchAddon | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-  let unlistenOutput: (() => void) | null = null;
-  let unlistenExit: (() => void) | null = null;
   let handleAuxClick: ((ev: MouseEvent) => void) | null = null;
   let handleDomPaste: ((ev: ClipboardEvent) => void) | null = null;
+  let unsubscribeSession: (() => void) | null = null;
+  let localDelegate: TerminalSessionDelegate | null = null;
+
+  function syncState(s: RegisteredTerminalSession) {
+    exited = s.exited;
+    exitCode = s.exitCode;
+    errorMsg = s.errorMsg;
+    detectedLocalUrl = s.detectedLocalUrl;
+    restarting = s.restarting;
+  }
 
   function scheduleFitAndResize() {
-    if (!visible || !term || !fitAddon) return;
+    if (!visible || !session || !hostEl) return;
     if (resizeTimer !== null) {
       clearTimeout(resizeTimer);
     }
     resizeTimer = setTimeout(() => {
-      if (!visible || !term || !fitAddon) return;
+      if (!visible || !session || !hostEl) return;
       try {
-        fitAddon.fit();
-        void ptyResize(activeSessionId, term.cols, term.rows).catch(() => {});
+        session.fitAddon.fit();
+        session.canvasAddon?.clearTextureAtlas();
+        session.term.refresh(0, Math.max(0, session.term.rows - 1));
+        void ptyResize(session.activeSessionId, session.term.cols, session.term.rows).catch(() => {});
       } catch {
         return;
       }
     }, 40);
   }
 
-  function applyFontZoom(delta: number) {
-    if (!term) return;
-    fontSize = clampTerminalFontSize(fontSize + delta);
-    term.options.fontSize = fontSize;
-    canvasAddon?.clearTextureAtlas();
-    scheduleFitAndResize();
-  }
-
-  async function handleClipboardPaste(selection?: 'clipboard' | 'primary') {
-    if (!term) return;
-    try {
-      let text = '';
-      try {
-        text = await clipboardReadText(selection);
-      } catch {
-        text = '';
-      }
-      if (!text) {
-        try {
-          text = await navigator.clipboard.readText();
-        } catch {
-          text = '';
-        }
-      }
-      if (!text) return;
-      if (isLargePaste(text, 64)) {
-        pendingLargePaste = text;
-        return;
-      }
-      term.paste(text);
-    } catch {
-      return;
-    }
-  }
-
   function confirmLargePaste() {
-    if (term && pendingLargePaste) {
-      term.paste(pendingLargePaste);
+    if (session && pendingLargePaste) {
+      session.term.paste(pendingLargePaste);
     }
     pendingLargePaste = null;
-    term?.focus();
-  }
-
-  async function spawnShell() {
-    if (!term) return;
-    exited = false;
-    exitCode = null;
-    errorMsg = null;
-    try {
-      await ptySpawn(activeSessionId, term.cols, term.rows);
-      term.focus();
-    } catch (err) {
-      const normalized = err as AppErrorPayload;
-      errorMsg = normalized.message ?? 'Failed to start terminal session';
-    }
+    session?.term.focus();
   }
 
   export async function restartSession() {
-    if (!term || restarting) return;
-    restarting = true;
-    try {
-      const oldSessionId = activeSessionId;
-      activeSessionId = `${sessionId}:${generateSessionToken()}`;
-      void ptyKill(oldSessionId).catch(() => {});
-      exited = false;
-      exitCode = null;
-      errorMsg = null;
-      term.reset();
-      try {
-        fitAddon?.fit();
-      } catch {
-        return;
-      }
-      await spawnShell();
-    } finally {
-      restarting = false;
-    }
+    if (!session || restarting) return;
+    await session.restart();
   }
 
   $effect(() => {
-    if (!activeSessionId.startsWith(`${sessionId}:`)) {
-      const oldSessionId = activeSessionId;
-      activeSessionId = `${sessionId}:${generateSessionToken()}`;
-      void ptyKill(oldSessionId).catch(() => {});
+    if (session) {
+      session.setTheme(theme);
     }
   });
 
   $effect(() => {
-    const activeTheme = theme;
-    const activeTerm = term;
-    const activeCanvas = canvasAddon;
-    if (!activeTerm) return;
-
-    activeTerm.options.theme = buildXtermTheme(activeTheme);
-    activeCanvas?.clearTextureAtlas();
-    try {
-      activeTerm.refresh(0, Math.max(0, activeTerm.rows - 1));
-    } catch {
-      return;
+    if (session) {
+      session.onOpenLocalhost = onOpenLocalhost;
     }
   });
 
-  onMount(async () => {
+  onMount(() => {
     if (!hostEl) return;
 
-    if (typeof document !== 'undefined' && 'fonts' in document) {
-      try {
-        await document.fonts.load(`${fontSize}px "JetBrains Mono Nerd"`);
-        await document.fonts.ready;
-      } catch {}
-    }
+    const s = getOrCreateTerminalSession(sessionId, { theme, onOpenLocalhost });
+    session = s;
+    syncState(s);
 
-    const instance = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 5000,
-      allowProposedApi: true,
-      allowTransparency: true,
-      fontFamily:
-        "'JetBrains Mono Nerd', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-      fontSize,
-      lineHeight: 1.35,
-      smoothScrollDuration: 0,
-      theme: buildXtermTheme(theme)
-    });
-
-    const fit = new FitAddon();
-    const search = new SearchAddon();
-    const unicode11 = new Unicode11Addon();
-    const webLinks = new WebLinksAddon((_event, uri) => {
-      const localUrl = extractLocalhostUrl(uri);
-      if (localUrl && onOpenLocalhost) {
-        onOpenLocalhost(localUrl);
-      } else {
-        void openExternal(uri).catch(() => {});
+    localDelegate = {
+      onToggleSearch: () => {
+        searchOpen = !searchOpen;
+        if (searchOpen) {
+          queueMicrotask(() => searchInputEl?.focus());
+        } else {
+          s.term.focus();
+        }
+      },
+      onLargePaste: (text: string) => {
+        pendingLargePaste = text;
+      },
+      onZoom: () => {
+        scheduleFitAndResize();
       }
+    };
+    s.delegate = localDelegate;
+
+    unsubscribeSession = s.subscribe(() => {
+      syncState(s);
     });
 
-    instance.loadAddon(fit);
-    instance.loadAddon(search);
-    instance.loadAddon(unicode11);
-    instance.loadAddon(webLinks);
-    instance.unicode.activeVersion = '11';
-
-    instance.open(hostEl);
+    hostEl.appendChild(s.containerEl);
 
     try {
-      const addon = new CanvasAddon();
-      canvasAddon = addon;
-      instance.loadAddon(addon);
-    } catch {
-      canvasAddon = null;
-    }
-
-    if (typeof document !== 'undefined' && 'fonts' in document) {
-      document.fonts.ready.then(() => {
-        if (!term) return;
-        canvasAddon?.clearTextureAtlas();
-        try {
-          term.refresh(0, Math.max(0, term.rows - 1));
-          fitAddon?.fit();
-        } catch {}
-      }).catch(() => {});
-    }
+      s.canvasAddon?.clearTextureAtlas();
+      s.fitAddon.fit();
+      s.term.refresh(0, Math.max(0, s.term.rows - 1));
+    } catch {}
 
     handleAuxClick = (ev: MouseEvent) => {
       if (ev.button === 1) {
         ev.preventDefault();
-        void handleClipboardPaste('primary');
+        void s.handlePaste('primary');
       }
     };
     handleDomPaste = (ev: ClipboardEvent) => {
       ev.preventDefault();
-      void handleClipboardPaste('clipboard');
+      void s.handlePaste('clipboard');
     };
     hostEl.addEventListener('auxclick', handleAuxClick);
     hostEl.addEventListener('paste', handleDomPaste);
-
-    instance.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
-      if (ev.type !== 'keydown') return true;
-
-      const disposition = resolveTerminalKey({
-        key: ev.key,
-        ctrlKey: ev.ctrlKey,
-        shiftKey: ev.shiftKey,
-        altKey: ev.altKey,
-        metaKey: ev.metaKey,
-        hasSelection: instance.hasSelection()
-      });
-
-      if (disposition === 'copy') {
-        const selected = instance.getSelection();
-        if (selected) {
-          void clipboardWriteText(selected).catch(() => {});
-          void navigator.clipboard.writeText(selected).catch(() => {});
-          instance.clearSelection();
-        }
-        return false;
-      }
-
-      if (disposition === 'paste') {
-        ev.preventDefault();
-        void handleClipboardPaste('clipboard');
-        return false;
-      }
-
-      if (disposition === 'app-shortcut') {
-        const lower = ev.key.toLowerCase();
-        if (lower === 's') {
-          ev.preventDefault();
-          searchOpen = !searchOpen;
-          if (searchOpen) {
-            queueMicrotask(() => searchInputEl?.focus());
-          } else {
-            instance.focus();
-          }
-          return false;
-        }
-        if (ev.key === '=' || ev.key === '+') {
-          ev.preventDefault();
-          applyFontZoom(1);
-          return false;
-        }
-        if (ev.key === '-') {
-          ev.preventDefault();
-          applyFontZoom(-1);
-          return false;
-        }
-        return false;
-      }
-
-      return true;
-    });
-
-    instance.onData((data) => {
-      if (!exited) {
-        void ptyWrite(activeSessionId, data).catch(() => {});
-      }
-    });
-
-    term = instance;
-    fitAddon = fit;
-    searchAddon = search;
-
-    try {
-      fit.fit();
-    } catch {
-      fitAddon = fit;
-    }
-
-    unlistenOutput = await onBackendEvent('pty:output', (payload) => {
-      if (payload.sessionId === activeSessionId && term) {
-        term.write(payload.data);
-        if (
-          payload.data.length <= 2048 &&
-          (payload.data.includes('localhost') || payload.data.includes('127.0.0.1'))
-        ) {
-          const found = extractLocalhostUrl(payload.data);
-          if (found) {
-            detectedLocalUrl = found;
-          }
-        }
-      }
-    });
-
-    unlistenExit = await onBackendEvent('pty:exit', (payload) => {
-      if (payload.sessionId === activeSessionId) {
-        exited = true;
-        exitCode = payload.code;
-      }
-    });
 
     resizeObserver = new ResizeObserver(() => {
       scheduleFitAndResize();
     });
     resizeObserver.observe(hostEl);
 
-    await spawnShell();
+    if (visible) {
+      queueMicrotask(() => {
+        scheduleFitAndResize();
+        s.term.focus();
+      });
+    }
   });
 
   $effect(() => {
-    if (visible && term && fitAddon) {
+    if (visible && session) {
       queueMicrotask(() => {
         scheduleFitAndResize();
-        term?.focus();
+        session?.term.focus();
       });
     }
   });
@@ -395,13 +178,17 @@
       handleDomPaste = null;
     }
     resizeObserver?.disconnect();
-    unlistenOutput?.();
-    unlistenExit?.();
-    void ptyKill(activeSessionId).catch(() => {});
-    canvasAddon?.dispose();
-    canvasAddon = null;
-    term?.dispose();
-    term = null;
+    unsubscribeSession?.();
+    unsubscribeSession = null;
+
+    if (session) {
+      if (session.delegate === localDelegate) {
+        session.delegate = undefined;
+      }
+      if (hostEl && session.containerEl.parentElement === hostEl) {
+        session.containerEl.remove();
+      }
+    }
   });
 </script>
 
@@ -419,14 +206,14 @@
           if (e.key === 'Enter') {
             e.preventDefault();
             if (e.shiftKey) {
-              searchAddon?.findPrevious(searchQuery);
+              session?.searchAddon.findPrevious(searchQuery);
             } else {
-              searchAddon?.findNext(searchQuery);
+              session?.searchAddon.findNext(searchQuery);
             }
           } else if (e.key === 'Escape') {
             e.preventDefault();
             searchOpen = false;
-            term?.focus();
+            session?.term.focus();
           }
         }}
       />
@@ -435,7 +222,7 @@
         aria-label="Close search"
         onclick={() => {
           searchOpen = false;
-          term?.focus();
+          session?.term.focus();
         }}
       >
         <X size={12} strokeWidth={2} />

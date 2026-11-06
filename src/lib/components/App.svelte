@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import Moon from '@lucide/svelte/icons/moon';
@@ -13,7 +13,9 @@
     fsWatch,
     gitPull,
     gitPush,
+    gitStageAll,
     gitStatus,
+    gitUnstageAll,
     normalizeTabPath,
     onBackendEvent,
     pickProjectFolderDialog,
@@ -29,6 +31,8 @@
     type GitStatusDto,
     type ProjectStateDto
   } from '$lib/ipc';
+  import { deriveUnstagedFolderPaths } from '$lib/git';
+  import { disposeAllTerminalSessions, disposeTerminalSession } from '$lib/terminalRegistry';
   import { resolveGlobalShortcut, type PaletteEntry } from '$lib/keymap';
   import {
     closePane,
@@ -118,6 +122,10 @@
       map[normalizeTabPath(item.path)] = item.badge;
     }
     return map;
+  });
+
+  const gitDirtyFolders = $derived.by<Set<string>>(() => {
+    return deriveUnstagedFolderPaths(repoStatus);
   });
 
   const activeWorkspace = $derived(
@@ -461,6 +469,38 @@
               sessionNotice = err.message ?? 'Git push failed';
             });
         }
+      },
+      {
+        id: 'act:git-stage-all',
+        label: 'Git: Stage All Changes',
+        category: 'Action',
+        keywords: 'stage all add git',
+        run: () => {
+          void gitStageAll()
+            .then(() => {
+              void refreshRepoStatus();
+              void gitPanelRef?.refresh();
+            })
+            .catch((err: AppErrorPayload) => {
+              sessionNotice = err.message ?? 'Git stage all failed';
+            });
+        }
+      },
+      {
+        id: 'act:git-unstage-all',
+        label: 'Git: Unstage All Changes',
+        category: 'Action',
+        keywords: 'unstage all reset git',
+        run: () => {
+          void gitUnstageAll()
+            .then(() => {
+              void refreshRepoStatus();
+              void gitPanelRef?.refresh();
+            })
+            .catch((err: AppErrorPayload) => {
+              sessionNotice = err.message ?? 'Git unstage all failed';
+            });
+        }
       }
     ];
 
@@ -564,6 +604,7 @@
       clearTimeout(saveSessionTimer);
       saveSessionTimer = null;
     }
+    void disposeAllTerminalSessions();
   });
 
   function setFocusedPane(paneId: string) {
@@ -572,16 +613,33 @@
   }
 
   function toggleSidebarPanel(panel: 'files' | 'git' | 'search') {
+    if (panel === 'git') {
+      const gitIsOpen = session.sidebar.visible && session.sidebar.panel === 'git';
+      if (!gitIsOpen) {
+        session.sidebar.visible = true;
+        session.sidebar.panel = 'git';
+        void tick().then(() => {
+          gitPanelRef?.focusInput();
+        });
+        return;
+      }
+
+      if (gitPanelRef?.isCommitFocused() || !gitPanelRef?.hasCommitInput()) {
+        session.sidebar.visible = false;
+      } else {
+        gitPanelRef?.focusInput();
+      }
+      return;
+    }
+
     if (session.sidebar.visible && session.sidebar.panel === panel) {
       session.sidebar.visible = false;
     } else {
       session.sidebar.visible = true;
       session.sidebar.panel = panel;
-      queueMicrotask(() => {
+      void tick().then(() => {
         if (panel === 'files') {
           fileTreeRef?.focusTree();
-        } else if (panel === 'git') {
-          gitPanelRef?.focusInput();
         } else if (panel === 'search') {
           searchPanelRef?.focusInput();
         }
@@ -606,6 +664,12 @@
     if (dirtyTab) {
       pendingClose = { paneId, tabId: dirtyTab.id };
       return;
+    }
+
+    for (const tab of targetPane.tabs) {
+      if (tab.kind === 'terminal') {
+        void disposeTerminalSession(tab.id);
+      }
     }
 
     const res = closePane(activeWorkspace.root, paneId);
@@ -680,6 +744,15 @@
     if (session.workspaces.length <= 1) return;
     const idx = session.workspaces.findIndex((w) => w.id === wsId);
     if (idx === -1) return;
+    const targetWs = session.workspaces[idx];
+    const panes = listAllPanes(targetWs.root);
+    for (const pane of panes) {
+      for (const tab of pane.tabs) {
+        if (tab.kind === 'terminal') {
+          void disposeTerminalSession(tab.id);
+        }
+      }
+    }
     session.workspaces.splice(idx, 1);
     if (session.activeWorkspaceId === wsId) {
       const nextIdx = Math.min(idx, session.workspaces.length - 1);
@@ -821,6 +894,7 @@
   async function openFolderByPath(path: string) {
     errorMessage = null;
     try {
+      void disposeAllTerminalSessions();
       const updated = await projectOpenFolder(path);
       projectState = updated;
       session = createInitialSession(updated.activeFolder);
@@ -1058,6 +1132,8 @@
     const targetTab = pane.tabs[index];
     if (targetTab.kind === 'file' && typeof targetTab.data.path === 'string') {
       void fsClearDraft(targetTab.data.path).catch(() => {});
+    } else if (targetTab.kind === 'terminal') {
+      void disposeTerminalSession(tabId);
     }
 
     pane.tabs.splice(index, 1);
@@ -1250,6 +1326,7 @@
                 bind:this={fileTreeRef}
                 workspaceRoot={projectState.activeFolder}
                 {gitBadges}
+                {gitDirtyFolders}
                 onOpenFile={(fullPath) => openFileInPane(fullPath)}
                 onEntryRenamed={(oldPath, newPath) => handleEntryRenamed(oldPath, newPath)}
                 onEntryDeleted={(deletedPath) => handleEntryDeleted(deletedPath)}
