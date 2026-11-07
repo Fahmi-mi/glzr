@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fsListWorkspaceFiles } from '$lib/ipc';
+  import { onDestroy, onMount, untrack } from 'svelte';
+  import { fsListWorkspaceFiles, onBackendEvent } from '$lib/ipc';
   import { fuzzyFilterFiles, parseQuickOpenInput } from '$lib/languages';
   import { smoothScroll } from '$lib/scroll';
   import FileIcon from '$lib/components/icons/FileIcon.svelte';
@@ -20,6 +21,13 @@
   let inputEl = $state<HTMLInputElement | null>(null);
   let listEl = $state<HTMLUListElement | null>(null);
   let lastNavTime = 0;
+  let hasLoaded = false;
+  let inFlight = false;
+  let pendingReload = false;
+  let loadSeq = 0;
+  let lastLoadedRoot = '';
+  let unlistenFsChanged: (() => void) | null = null;
+  let fsChangedTimer: ReturnType<typeof setTimeout> | null = null;
 
   function getEventLag(event: KeyboardEvent): number {
     const ts = event.timeStamp;
@@ -39,27 +47,116 @@
     }
   }
 
-  async function refreshFileList() {
-    loading = true;
+  async function loadFiles(showLoading: boolean) {
+    if (!workspaceRoot) {
+      allFiles = [];
+      hasLoaded = false;
+      loading = false;
+      pendingReload = false;
+      return;
+    }
+    if (inFlight) {
+      pendingReload = true;
+      if (showLoading && allFiles.length === 0) {
+        loading = true;
+      }
+      return;
+    }
+    inFlight = true;
+    if (showLoading && allFiles.length === 0) {
+      loading = true;
+    }
+    const currentSeq = ++loadSeq;
+    const currentTargetRoot = workspaceRoot;
     try {
       const raw = await fsListWorkspaceFiles();
+      if (currentSeq !== loadSeq || currentTargetRoot !== workspaceRoot) {
+        return;
+      }
       allFiles = raw.map((path) => ({ path, lower: path.toLowerCase() }));
+      hasLoaded = true;
     } catch {
-      allFiles = [];
+      if (currentSeq === loadSeq && currentTargetRoot === workspaceRoot) {
+        if (allFiles.length === 0) {
+          allFiles = [];
+        }
+      }
     } finally {
-      loading = false;
+      if (currentSeq === loadSeq) {
+        inFlight = false;
+        loading = false;
+        if (pendingReload && workspaceRoot) {
+          pendingReload = false;
+          void loadFiles(false);
+        }
+      }
     }
   }
 
+  onMount(async () => {
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      unlistenFsChanged = await onBackendEvent('fs:changed', () => {
+        if (fsChangedTimer !== null) {
+          clearTimeout(fsChangedTimer);
+        }
+        fsChangedTimer = setTimeout(() => {
+          fsChangedTimer = null;
+          void loadFiles(false);
+        }, 200);
+      });
+    }
+  });
+
+  onDestroy(() => {
+    unlistenFsChanged?.();
+    if (fsChangedTimer !== null) {
+      clearTimeout(fsChangedTimer);
+      fsChangedTimer = null;
+    }
+  });
+
+  $effect(() => {
+    const currentRoot = workspaceRoot;
+    untrack(() => {
+      if (currentRoot && currentRoot !== lastLoadedRoot) {
+        lastLoadedRoot = currentRoot;
+        hasLoaded = false;
+        allFiles = [];
+        loadSeq++;
+        pendingReload = false;
+        if (fsChangedTimer !== null) {
+          clearTimeout(fsChangedTimer);
+          fsChangedTimer = null;
+        }
+        void loadFiles(open);
+      } else if (!currentRoot && lastLoadedRoot) {
+        lastLoadedRoot = '';
+        hasLoaded = false;
+        allFiles = [];
+        loadSeq++;
+        pendingReload = false;
+        loading = false;
+        if (fsChangedTimer !== null) {
+          clearTimeout(fsChangedTimer);
+          fsChangedTimer = null;
+        }
+      }
+    });
+  });
+
   $effect(() => {
     if (open) {
-      queryInput = '';
-      selectedIndex = 0;
-      if (listEl) listEl.scrollTop = 0;
-      void refreshFileList();
-      queueMicrotask(() => {
-        inputEl?.focus();
+      untrack(() => {
+        queryInput = '';
+        selectedIndex = 0;
         if (listEl) listEl.scrollTop = 0;
+        if (!hasLoaded) {
+          void loadFiles(true);
+        }
+        queueMicrotask(() => {
+          inputEl?.focus();
+          if (listEl) listEl.scrollTop = 0;
+        });
       });
     }
   });
@@ -71,8 +168,8 @@
   });
 
   function chooseItem(relPath: string) {
-    const cleanRoot = workspaceRoot.replace(/\/+$/, '');
-    const fullPath = `${cleanRoot}/${relPath}`;
+    const cleanRoot = workspaceRoot ? workspaceRoot.replace(/\/+$/, '') : '';
+    const fullPath = cleanRoot ? `${cleanRoot}/${relPath}` : relPath;
     onSelect(fullPath, parsed.line);
     onClose();
   }

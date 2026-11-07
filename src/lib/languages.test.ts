@@ -25,6 +25,9 @@ describe('language detection and quick open fuzzy matcher', () => {
     const rustExt = await loadLanguageExtension('rust');
     expect(rustExt).not.toBeNull();
 
+    const rustExtCached = await loadLanguageExtension('rust');
+    expect(rustExtCached).toBe(rustExt);
+
     const goExt = await loadLanguageExtension('go');
     expect(goExt).not.toBeNull();
 
@@ -33,6 +36,13 @@ describe('language detection and quick open fuzzy matcher', () => {
 
     const plainExt = await loadLanguageExtension('plaintext');
     expect(plainExt).toBeNull();
+
+    const [json1, json2] = await Promise.all([
+      loadLanguageExtension('json'),
+      loadLanguageExtension('json')
+    ]);
+    expect(json1).not.toBeNull();
+    expect(json1).toBe(json2);
   });
 
   it('parses quick open query with optional line number and ranks fuzzy matches', () => {

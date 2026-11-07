@@ -103,6 +103,7 @@
 
   let idSeq = $state(100);
   let saveSessionTimer: ReturnType<typeof setTimeout> | null = null;
+  let fsChangedTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionReady = $state(false);
   let unlistenFsChanged: (() => void) | null = null;
 
@@ -578,8 +579,14 @@
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
         unlistenFsChanged = await onBackendEvent('fs:changed', () => {
-          void fileTreeRef?.refresh();
-          void refreshRepoStatus();
+          if (fsChangedTimer !== null) {
+            clearTimeout(fsChangedTimer);
+          }
+          fsChangedTimer = setTimeout(() => {
+            fsChangedTimer = null;
+            void fileTreeRef?.refresh();
+            void refreshRepoStatus();
+          }, 180);
         });
       }
 
@@ -630,6 +637,10 @@
 
   onDestroy(() => {
     unlistenFsChanged?.();
+    if (fsChangedTimer !== null) {
+      clearTimeout(fsChangedTimer);
+      fsChangedTimer = null;
+    }
     void fsUnwatch().catch(() => {});
     if (saveSessionTimer !== null) {
       clearTimeout(saveSessionTimer);
@@ -927,6 +938,10 @@
   async function openFolderByPath(path: string) {
     errorMessage = null;
     try {
+      if (fsChangedTimer !== null) {
+        clearTimeout(fsChangedTimer);
+        fsChangedTimer = null;
+      }
       void disposeAllTerminalSessions();
       const updated = await projectOpenFolder(path);
       projectState = updated;

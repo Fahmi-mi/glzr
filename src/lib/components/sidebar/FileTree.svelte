@@ -47,6 +47,7 @@
   interface TreeRow {
     entry: DirEntryDto;
     depth: number;
+    cleanRel: string;
   }
 
   let dirCache = $state<Record<string, DirEntryDto[]>>({});
@@ -80,12 +81,22 @@
     };
   }
 
+  const cleanRelCache = new Map<string, string>();
+
+  function getCleanRel(relPath: string): string {
+    const cached = cleanRelCache.get(relPath);
+    if (cached !== undefined) return cached;
+    const cleaned = relPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+    cleanRelCache.set(relPath, cleaned);
+    return cleaned;
+  }
+
   const flatRows = $derived.by<TreeRow[]>(() => {
     const out: TreeRow[] = [];
     function walk(dirKey: string, depth: number) {
       const items = dirCache[dirKey] ?? [];
       for (const item of items) {
-        out.push({ entry: item, depth });
+        out.push({ entry: item, depth, cleanRel: getCleanRel(item.relPath) });
         if (item.isDir && expandedDirs[item.path]) {
           walk(item.path, depth + 1);
         }
@@ -107,6 +118,7 @@
 
   export async function refresh() {
     errorMsg = null;
+    cleanRelCache.clear();
     await loadDirEntries('');
     const expandedKeys = Object.keys(expandedDirs).filter((k) => expandedDirs[k]);
     for (const key of expandedKeys) {
@@ -394,8 +406,7 @@
     {:else}
       {#each flatRows as row (row.entry.path)}
         {@const badge = gitBadges[row.entry.relPath]}
-        {@const cleanRel = row.entry.relPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '')}
-        {@const isDirtyFolder = row.entry.isDir && gitDirtyFolders.has(cleanRel)}
+        {@const isDirtyFolder = row.entry.isDir && gitDirtyFolders.has(row.cleanRel)}
         <div
           class="tree-row"
           class:selected={selectedPath === row.entry.path}
@@ -593,6 +604,8 @@
   }
 
   .tree-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 28px;
     height: auto;
     min-height: calc(28px * var(--ui-scale, 1));
     flex-shrink: 0;

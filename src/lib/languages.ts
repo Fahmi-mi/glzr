@@ -208,88 +208,101 @@ export function detectLanguage(filePath: string, firstLine?: string): LanguageEn
   return PLAIN_TEXT_ENTRY;
 }
 
-export async function loadLanguageExtension(langId: LanguageId): Promise<Extension | null> {
-  switch (langId) {
-    case 'javascript': {
-      const mod = await import('@codemirror/lang-javascript');
-      return mod.javascript();
-    }
-    case 'jsx': {
-      const mod = await import('@codemirror/lang-javascript');
-      return mod.javascript({ jsx: true });
-    }
-    case 'typescript': {
-      const mod = await import('@codemirror/lang-javascript');
-      return mod.javascript({ typescript: true });
-    }
-    case 'tsx': {
-      const mod = await import('@codemirror/lang-javascript');
-      return mod.javascript({ jsx: true, typescript: true });
-    }
-    case 'json': {
-      const mod = await import('@codemirror/lang-json');
-      return mod.json();
-    }
-    case 'html': {
-      const mod = await import('@codemirror/lang-html');
-      return mod.html();
-    }
-    case 'css': {
-      const mod = await import('@codemirror/lang-css');
-      return mod.css();
-    }
-    case 'markdown': {
-      const mod = await import('@codemirror/lang-markdown');
-      return mod.markdown();
-    }
-    case 'rust': {
-      const mod = await import('@codemirror/lang-rust');
-      return mod.rust();
-    }
-    case 'go': {
-      const [{ StreamLanguage }, { go }] = await Promise.all([
-        import('@codemirror/language'),
-        import('@codemirror/legacy-modes/mode/go')
-      ]);
-      return StreamLanguage.define(go);
-    }
-    case 'python': {
-      const mod = await import('@codemirror/lang-python');
-      return mod.python();
-    }
-    case 'yaml': {
-      const mod = await import('@codemirror/lang-yaml');
-      return mod.yaml();
-    }
-    case 'svelte': {
-      const mod = await import('@replit/codemirror-lang-svelte');
-      return mod.svelte();
-    }
-    case 'toml': {
-      const [{ StreamLanguage }, { toml }] = await Promise.all([
-        import('@codemirror/language'),
-        import('@codemirror/legacy-modes/mode/toml')
-      ]);
-      return StreamLanguage.define(toml);
-    }
-    case 'shell': {
-      const [{ StreamLanguage }, { shell }] = await Promise.all([
-        import('@codemirror/language'),
-        import('@codemirror/legacy-modes/mode/shell')
-      ]);
-      return StreamLanguage.define(shell);
-    }
-    case 'dockerfile': {
-      const [{ StreamLanguage }, { dockerFile }] = await Promise.all([
-        import('@codemirror/language'),
-        import('@codemirror/legacy-modes/mode/dockerfile')
-      ]);
-      return StreamLanguage.define(dockerFile);
-    }
-    case 'plaintext':
-    default:
-      return null;
+const languageExtensionCache = new Map<LanguageId, Promise<Extension | null>>();
+
+export function loadLanguageExtension(langId: LanguageId): Promise<Extension | null> {
+  const cached = languageExtensionCache.get(langId);
+  if (cached) {
+    return cached;
   }
+  const promise = (async () => {
+    switch (langId) {
+      case 'javascript': {
+        const mod = await import('@codemirror/lang-javascript');
+        return mod.javascript();
+      }
+      case 'jsx': {
+        const mod = await import('@codemirror/lang-javascript');
+        return mod.javascript({ jsx: true });
+      }
+      case 'typescript': {
+        const mod = await import('@codemirror/lang-javascript');
+        return mod.javascript({ typescript: true });
+      }
+      case 'tsx': {
+        const mod = await import('@codemirror/lang-javascript');
+        return mod.javascript({ jsx: true, typescript: true });
+      }
+      case 'json': {
+        const mod = await import('@codemirror/lang-json');
+        return mod.json();
+      }
+      case 'html': {
+        const mod = await import('@codemirror/lang-html');
+        return mod.html();
+      }
+      case 'css': {
+        const mod = await import('@codemirror/lang-css');
+        return mod.css();
+      }
+      case 'markdown': {
+        const mod = await import('@codemirror/lang-markdown');
+        return mod.markdown();
+      }
+      case 'rust': {
+        const mod = await import('@codemirror/lang-rust');
+        return mod.rust();
+      }
+      case 'go': {
+        const [{ StreamLanguage }, { go }] = await Promise.all([
+          import('@codemirror/language'),
+          import('@codemirror/legacy-modes/mode/go')
+        ]);
+        return StreamLanguage.define(go);
+      }
+      case 'python': {
+        const mod = await import('@codemirror/lang-python');
+        return mod.python();
+      }
+      case 'yaml': {
+        const mod = await import('@codemirror/lang-yaml');
+        return mod.yaml();
+      }
+      case 'svelte': {
+        const mod = await import('@replit/codemirror-lang-svelte');
+        return mod.svelte();
+      }
+      case 'toml': {
+        const [{ StreamLanguage }, { toml }] = await Promise.all([
+          import('@codemirror/language'),
+          import('@codemirror/legacy-modes/mode/toml')
+        ]);
+        return StreamLanguage.define(toml);
+      }
+      case 'shell': {
+        const [{ StreamLanguage }, { shell }] = await Promise.all([
+          import('@codemirror/language'),
+          import('@codemirror/legacy-modes/mode/shell')
+        ]);
+        return StreamLanguage.define(shell);
+      }
+      case 'dockerfile': {
+        const [{ StreamLanguage }, { dockerFile }] = await Promise.all([
+          import('@codemirror/language'),
+          import('@codemirror/legacy-modes/mode/dockerfile')
+        ]);
+        return StreamLanguage.define(dockerFile);
+      }
+      case 'plaintext':
+      default:
+        return null;
+    }
+  })().catch((err) => {
+    languageExtensionCache.delete(langId);
+    throw err;
+  });
+  languageExtensionCache.set(langId, promise);
+  return promise;
 }
 
 export interface QuickOpenQuery {

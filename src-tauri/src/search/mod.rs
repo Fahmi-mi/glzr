@@ -113,9 +113,16 @@ pub fn build_rg_args(opts: &SearchQueryOptions) -> Vec<String> {
         "--column".to_string(),
         "--no-heading".to_string(),
         "--color=never".to_string(),
+        "--max-columns=500".to_string(),
         "--glob=!.git".to_string(),
         "--glob=!node_modules".to_string(),
         "--glob=!target".to_string(),
+        "--glob=!.svelte-kit".to_string(),
+        "--glob=!dist".to_string(),
+        "--glob=!build".to_string(),
+        "--glob=!.next".to_string(),
+        "--glob=!.venv".to_string(),
+        "--glob=!__pycache__".to_string(),
     ];
 
     if opts.case_sensitive {
@@ -396,5 +403,27 @@ mod tests {
         assert!(was_truncated);
         assert!(collected.iter().all(|m| m.rel_path == "alpha.rs"));
         Ok(())
+    }
+
+    #[test]
+    fn builds_rg_args_with_max_columns_and_default_globs() {
+        let opts = SearchQueryOptions {
+            query_id: "q-test".into(),
+            pattern: "target_word".into(),
+            case_sensitive: false,
+            regex: false,
+            glob: None,
+        };
+        let args = build_rg_args(&opts);
+        assert!(args.contains(&"--max-columns=500".to_string()));
+        assert!(args.contains(&"--glob=!.git".to_string()));
+        assert!(args.contains(&"--glob=!node_modules".to_string()));
+        assert!(args.contains(&"--glob=!target".to_string()));
+        assert!(args.contains(&"--glob=!.svelte-kit".to_string()));
+        assert!(args.contains(&"--glob=!dist".to_string()));
+        assert!(args.contains(&"--glob=!build".to_string()));
+        assert!(args.contains(&"--glob=!.next".to_string()));
+        assert!(args.contains(&"--glob=!.venv".to_string()));
+        assert!(args.contains(&"--glob=!__pycache__".to_string()));
     }
 }
