@@ -60,6 +60,7 @@ export interface RegisteredTerminalSession {
   applyZoom: (delta: number) => void;
   restart: () => Promise<void>;
   handlePaste: (selection?: 'clipboard' | 'primary') => Promise<void>;
+  focus: () => void;
 }
 
 function generateSessionToken(): string {
@@ -241,6 +242,23 @@ function createTerminalSessionInstance(
       } catch {
         return;
       }
+    },
+    focus() {
+      if (session.disposed) return;
+      try {
+        if (typeof session.containerEl?.querySelector === 'function') {
+          const textarea = session.containerEl.querySelector<HTMLTextAreaElement>('textarea.xterm-helper-textarea');
+          if (textarea && typeof textarea.focus === 'function') {
+            textarea.focus({ preventScroll: true });
+          }
+        }
+        if (typeof session.term?.focus === 'function') {
+          session.term.focus();
+        }
+        if (typeof session.term?.scrollToBottom === 'function') {
+          session.term.scrollToBottom();
+        }
+      } catch {}
     }
   };
 
@@ -252,7 +270,14 @@ function createTerminalSessionInstance(
     session.notify();
     try {
       await ptySpawn(session.activeSessionId, session.term.cols, session.term.rows);
-      session.term.focus();
+      if (
+        typeof document === 'undefined' ||
+        !document.activeElement ||
+        document.activeElement === document.body ||
+        session.containerEl?.contains(document.activeElement)
+      ) {
+        session.focus();
+      }
     } catch (err) {
       const normalized = err as AppErrorPayload;
       session.errorMsg = normalized.message ?? 'Failed to start terminal session';

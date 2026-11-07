@@ -15,11 +15,18 @@
   interface Props {
     sessionId: string;
     visible?: boolean;
+    focused?: boolean;
     theme?: 'dark' | 'light';
     onOpenLocalhost?: (url: string) => void;
   }
 
-  let { sessionId, visible = true, theme = 'dark', onOpenLocalhost }: Props = $props();
+  let {
+    sessionId,
+    visible = true,
+    focused = false,
+    theme = 'dark',
+    onOpenLocalhost
+  }: Props = $props();
 
   let hostEl = $state<HTMLDivElement | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
@@ -60,6 +67,7 @@
         session.fitAddon.fit();
         session.canvasAddon?.clearTextureAtlas();
         session.term.refresh(0, Math.max(0, session.term.rows - 1));
+        session.term.scrollToBottom();
         void ptyResize(session.activeSessionId, session.term.cols, session.term.rows).catch(() => {});
       } catch {
         return;
@@ -72,7 +80,12 @@
       session.term.paste(pendingLargePaste);
     }
     pendingLargePaste = null;
-    session?.term.focus();
+    session?.focus();
+  }
+
+  export function focus() {
+    if (!session) return;
+    session.focus();
   }
 
   export async function restartSession() {
@@ -103,9 +116,9 @@
       onToggleSearch: () => {
         searchOpen = !searchOpen;
         if (searchOpen) {
-          queueMicrotask(() => searchInputEl?.focus());
+          queueMicrotask(() => searchInputEl?.focus({ preventScroll: true }));
         } else {
-          s.term.focus();
+          s.focus();
         }
       },
       onLargePaste: (text: string) => {
@@ -127,6 +140,7 @@
       s.canvasAddon?.clearTextureAtlas();
       s.fitAddon.fit();
       s.term.refresh(0, Math.max(0, s.term.rows - 1));
+      s.term.scrollToBottom();
     } catch {}
 
     handleAuxClick = (ev: MouseEvent) => {
@@ -150,7 +164,17 @@
     if (visible) {
       queueMicrotask(() => {
         scheduleFitAndResize();
-        s.term.focus();
+        if (focused) {
+          s.focus();
+        }
+      });
+      requestAnimationFrame(() => {
+        try {
+          s.canvasAddon?.clearTextureAtlas();
+          s.fitAddon.fit();
+          s.term.refresh(0, Math.max(0, s.term.rows - 1));
+          s.term.scrollToBottom();
+        } catch {}
       });
     }
   });
@@ -159,7 +183,9 @@
     if (visible && session) {
       queueMicrotask(() => {
         scheduleFitAndResize();
-        session?.term.focus();
+        if (focused) {
+          session?.focus();
+        }
       });
     }
   });
@@ -213,7 +239,7 @@
           } else if (e.key === 'Escape') {
             e.preventDefault();
             searchOpen = false;
-            session?.term.focus();
+            session?.focus();
           }
         }}
       />
@@ -222,7 +248,7 @@
         aria-label="Close search"
         onclick={() => {
           searchOpen = false;
-          session?.term.focus();
+          session?.focus();
         }}
       >
         <X size={12} strokeWidth={2} />

@@ -162,7 +162,7 @@
   }
 
   export function focusUrlBar() {
-    urlInputEl?.focus();
+    urlInputEl?.focus({ preventScroll: true });
     urlInputEl?.select();
   }
 

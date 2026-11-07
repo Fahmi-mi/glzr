@@ -15,6 +15,7 @@
   import FileTab, { type FileTabMeta } from '$lib/components/tabs/FileTab.svelte';
   import PreviewTab from '$lib/components/tabs/PreviewTab.svelte';
   import TerminalTab from '$lib/components/tabs/TerminalTab.svelte';
+  import { getTerminalSession } from '$lib/terminalRegistry';
   import Self from './PaneNode.svelte';
 
   interface Props {
@@ -89,6 +90,50 @@
       };
     }
   });
+
+  function focusActiveContent(explicitTabId?: string, explicitKind?: string) {
+    if (node.type !== 'pane') return;
+    const targetTab = explicitTabId
+      ? node.tabs.find((t) => t.id === explicitTabId)
+      : activePaneTab;
+    const kind = explicitKind ?? targetTab?.kind;
+    const tabId = explicitTabId ?? targetTab?.id;
+    if (!tabId || !kind) return;
+
+    if (kind === 'terminal') {
+      const session = getTerminalSession(tabId);
+      if (session) {
+        session.focus();
+        session.term.scrollToBottom();
+      }
+    } else if (kind === 'file') {
+      activeFileRef?.focus();
+    }
+  }
+
+  $effect(() => {
+    if (node.type === 'pane' && node.id === focusedPaneId && workspaceVisible && activePaneTab) {
+      const tabId = activePaneTab.id;
+      const tabKind = activePaneTab.kind;
+      queueMicrotask(() => {
+        if (node.type !== 'pane' || node.id !== focusedPaneId || !workspaceVisible) return;
+        focusActiveContent(tabId, tabKind);
+      });
+    }
+  });
+
+  function handlePaneMouseDown(event: MouseEvent) {
+    if (node.type !== 'pane') return;
+    onFocusPane(node.id);
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('button, input, select, textarea, a, .dropdown-menu')) {
+      return;
+    }
+    queueMicrotask(() => {
+      focusActiveContent();
+    });
+  }
 
   function startSplitterDrag(event: MouseEvent) {
     if (node.type !== 'split' || !splitContainerEl) return;
@@ -220,7 +265,7 @@
     class="pane"
     class:focused={node.id === focusedPaneId}
     class:drag-over={dragOverPane}
-    onmousedown={() => onFocusPane(node.id)}
+    onmousedown={handlePaneMouseDown}
     onfocusin={() => onFocusPane(node.id)}
     ondragover={(e) => {
       e.preventDefault();
@@ -249,6 +294,9 @@
               onclick={() => {
                 onFocusPane(node.id);
                 onSelectTab(node.id, tab.id);
+                queueMicrotask(() => {
+                  focusActiveContent(tab.id, tab.kind);
+                });
               }}
             >
               {#if tab.kind === 'file'}
@@ -389,6 +437,7 @@
         <TerminalTab
           sessionId={termTab.id}
           visible={workspaceVisible && activePaneTab?.id === termTab.id}
+          focused={workspaceVisible && node.id === focusedPaneId && activePaneTab?.id === termTab.id}
           {theme}
           onOpenLocalhost={(url) => onAddPreviewTab(node.id, url)}
         />

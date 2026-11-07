@@ -88,4 +88,50 @@ describe('terminalRegistry lifecycle and persistence', () => {
 
     await disposeTerminalSession(tabId);
   });
+
+  it('focuses session without throwing and calls scrollToBottom', async () => {
+    const {
+      disposeTerminalSession,
+      getOrCreateTerminalSession
+    } = await import('./terminalRegistry');
+
+    const tabId = 'tab-focus-test';
+    const session = getOrCreateTerminalSession(tabId);
+
+    let scrolledToBottom = false;
+    session.term.scrollToBottom = () => {
+      scrolledToBottom = true;
+    };
+
+    let termFocused = false;
+    session.term.focus = () => {
+      termFocused = true;
+    };
+
+    let textareaFocusOptions: unknown = null;
+    const mockTextarea = {
+      focus: (options?: unknown) => {
+        textareaFocusOptions = options;
+      }
+    };
+    session.containerEl.querySelector = (selector: string) => {
+      if (selector === 'textarea.xterm-helper-textarea') {
+        return mockTextarea as unknown as HTMLTextAreaElement;
+      }
+      return null;
+    };
+
+    expect(() => session.focus()).not.toThrow();
+    expect(scrolledToBottom).toBe(true);
+    expect(termFocused).toBe(true);
+    expect(textareaFocusOptions).toEqual({ preventScroll: true });
+
+    await disposeTerminalSession(tabId);
+
+    scrolledToBottom = false;
+    termFocused = false;
+    session.focus();
+    expect(scrolledToBottom).toBe(false);
+    expect(termFocused).toBe(false);
+  });
 });
